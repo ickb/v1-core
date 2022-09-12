@@ -54,6 +54,7 @@ fn count(source: Source, ickb_code_hash: &Byte32) -> Result<(u64, u64), Error> {
             }
             Some(type_hash)
                 if type_hash.as_slice() == NERVOS_DAO_CODE_HASH.as_slice()
+                    && extract_nervos_dao_data(index, source)? == 0
                     && cell_has_lock(index, source, ickb_code_hash)? =>
             {
                 let equivalent_capacity =
@@ -165,6 +166,22 @@ fn extract_ickb_amount(index: usize, source: Source) -> Result<u64, Error> {
 
     let mut buffer = [0u8; ICKB_DATA_LEN];
     buffer.copy_from_slice(&data[0..ICKB_DATA_LEN]);
+    let amount = u64::from_le_bytes(buffer);
+
+    Ok(amount)
+}
+
+const NERVOS_DAO_DATA_LEN: usize = 8;
+
+fn extract_nervos_dao_data(index: usize, source: Source) -> Result<u64, Error> {
+    let data = load_cell_data(index, source)?;
+
+    if data.len() != NERVOS_DAO_DATA_LEN {
+        return Err(Error::Encoding);
+    }
+
+    let mut buffer = [0u8; NERVOS_DAO_DATA_LEN];
+    buffer.copy_from_slice(&data[0..NERVOS_DAO_DATA_LEN]);
     let amount = u64::from_le_bytes(buffer);
 
     Ok(amount)
