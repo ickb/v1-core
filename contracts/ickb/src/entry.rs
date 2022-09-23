@@ -1,24 +1,18 @@
-use core::result::Result;
+use core::{cmp::min, result::Result};
 
 use ckb_std::{
     ckb_constants::Source,
     ckb_types::{bytes::Bytes, packed::Byte32, prelude::*},
-    debug,
-    high_level::*,
-    syscalls::SysError,
+    high_level::load_script,
 };
 
+use crate::celltype::{cell_type_iter, CellType};
 use crate::error::Error;
-
-//Current code problems:
-// (TO-DO-1) how to express NervosDAO type hash in a way that works both in testing and production?
-// (TO-DO-2) load_cell_capacity and load_cell_occupied_capacity return an u64 representing a CKB amount, is it expressed in shannons?
-// (TO-DO-3) if the transaction has no output, how to get current block header?
+use crate::utils::{extract_accumulated_rate, extract_ickb_data, extract_unused_capacity};
 
 pub fn main() -> Result<(), Error> {
     let script = load_script()?;
     let args: Bytes = script.args().unpack();
-    debug!("script args is {:?}", args);
 
     if !args.is_empty() {
         return Err(Error::NotEmptyArgs);
@@ -26,173 +20,86 @@ pub fn main() -> Result<(), Error> {
 
     let code_hash = script.code_hash();
 
-    let (in_ickb, in_sdc) = count(Source::Input, &code_hash)?;
-    let (out_ickb, out_sdc) = count(Source::Output, &code_hash)?;
+    let out_ickb = check_output(&code_hash)?;
+    let (in_ickb, in_receipts_ickb, in_deposits_ickb) = check_input(&code_hash)?;
 
-    if in_ickb + SDC_CAPACITY * out_sdc < out_ickb + SDC_CAPACITY * in_sdc {
-        return Err(Error::Amount);
+    // Receipts are not transferrable, having this as strict equality prevents accidental burns of receipts.
+    if in_ickb + in_receipts_ickb == out_ickb + in_deposits_ickb {
+        Ok(())
+    } else {
+        Err(Error::Amount)
     }
-
-    Ok(())
 }
 
-const NERVOS_DAO_CODE_HASH: [u8; 32] = [0u8; 32]; // (TO-DO-1)////////////////////////////////////
+const ICKB_CAP_PER_RECEIPT: u64 = 10_000 * 100_000_000; // 10000 iCKB in shannons.
 
-fn count(source: Source, ickb_code_hash: &Byte32) -> Result<(u64, u64), Error> {
-    let (withdrawing_accumulated_rate, sdc_equivalent_capacity) = sdc_data()?;
+fn check_input(ickb_code_hash: &Byte32) -> Result<(u64, u64, u64), Error> {
+    let mut total_ickb_amount = 0;
+    let mut total_receipts_ickb = 0;
+    let mut total_deposits_ickb = 0;
 
-    let mut total_token_amount = 0;
-    let mut total_sdc_count = 0;
+    for maybe_cell_info in cell_type_iter(Source::Output, &ickb_code_hash) {
+        let (index, source, cell_type) = maybe_cell_info?;
 
-    for (index, type_hash) in QueryIter::new(load_cell_type_hash, source).enumerate() {
-        match type_hash {
-            None => (),
-            Some(type_hash) if type_hash.as_slice() == ickb_code_hash.as_slice() => {
-                total_token_amount += extract_ickb_amount(index, source)?;
-
-                ickb_extra_checks(index, source, ickb_code_hash)?
+        match cell_type {
+            CellType::Deposit => {
+                total_deposits_ickb +=
+                    ckb_to_ickb(index, source, extract_unused_capacity(index, source)?)?;
             }
-            Some(type_hash)
-                if type_hash.as_slice() == NERVOS_DAO_CODE_HASH.as_slice()
-                    && extract_nervos_dao_data(index, source)? == 0
-                    && cell_has_lock(index, source, ickb_code_hash)? =>
-            {
-                let equivalent_capacity =
-                    maximum_withdrawable(index, source, withdrawing_accumulated_rate)?;
+            CellType::TokenAndReceipt => {
+                let (token_amount, receipt_amount) = extract_ickb_data(index, source)?;
 
-                total_sdc_count += (sdc_equivalent_capacity <= equivalent_capacity) as u64;
+                total_ickb_amount += token_amount;
 
-                sdc_extra_checks(index, source, equivalent_capacity, sdc_equivalent_capacity)?
+                // Cap max ickb equivalent per receipt.
+                total_receipts_ickb += min(
+                    ckb_to_ickb(index, source, receipt_amount)?,
+                    ICKB_CAP_PER_RECEIPT,
+                );
             }
-            Some(_) => (),
-        };
+            CellType::Unknown => (),
+        }
     }
 
-    Ok((total_token_amount, total_sdc_count))
+    return Ok((total_ickb_amount, total_receipts_ickb, total_deposits_ickb));
 }
 
-fn maximum_withdrawable(
-    index: usize,
-    source: Source,
-    withdrawing_accumulated_rate: u64,
-) -> Result<u64, SysError> {
-    if source == Source::Output {
-        return load_cell_capacity(index, source);
+const GENESIS_ACCUMULATED_RATE: u128 = 10_000_000_000_000_000; // Genesis block accumulated rate.
+
+fn ckb_to_ickb(index: usize, source: Source, amount: u64) -> Result<u64, Error> {
+    Ok((u128::from(amount) * GENESIS_ACCUMULATED_RATE
+        / u128::from(extract_accumulated_rate(index, source)?)) as u64)
+}
+
+fn check_output(ickb_code_hash: &Byte32) -> Result<u64, Error> {
+    let mut total_ickb_amount = 0;
+
+    let mut maybe_deposit_amount: Option<u64> = None;
+    for maybe_cell_info in cell_type_iter(Source::Output, &ickb_code_hash) {
+        let (index, source, cell_type) = maybe_cell_info?;
+
+        // A deposit must be followed by its exact receipt.
+        match (maybe_deposit_amount, cell_type) {
+            (None, CellType::Deposit) => {
+                maybe_deposit_amount = Some(extract_unused_capacity(index, source)?);
+            }
+            (Some(deposit_amount), CellType::TokenAndReceipt) => {
+                let (token_amount, receipt_amount) = extract_ickb_data(index, source)?;
+
+                // Having this as strict check prevents accidental burns of receipts amounts.
+                if receipt_amount == deposit_amount {
+                    maybe_deposit_amount = None;
+                } else {
+                    return Err(Error::ReceiptAmount);
+                }
+
+                total_ickb_amount += token_amount;
+            }
+            (Some(_), _) => return Err(Error::NoReceipt),
+            (None, CellType::TokenAndReceipt) => return Err(Error::NoDeposit),
+            (None, CellType::Unknown) => (),
+        }
     }
 
-    let equivalent_capacity = maximum_withdrawable_(
-        load_cell_capacity(index, source)?, // (TO-DO-2)////////////////////////////////////
-        load_cell_occupied_capacity(index, source)?, // (TO-DO-2)///////////////////
-        extract_accumulated_rate(index, source)?,
-        withdrawing_accumulated_rate,
-    );
-
-    Ok(equivalent_capacity)
-}
-
-//Standard Deposit Cell data
-const SDC_CAPACITY: u64 = 1_000_000_000_000; // 10000 CKB in shannons (TO-DO-2)//////////////////////////
-const SDC_OCCUPIED_CAPACITY: u64 = 10_000_000_000; // 100 CKB in shannons (TO-DO-2)/////////////////////
-const SDC_ACCUMULATED_RATE: u64 = 10_000_000_000_000_000; //Genesis block accumulated rate
-
-fn sdc_data() -> Result<(u64, u64), Error> {
-    let withdrawing_accumulated_rate = extract_accumulated_rate(0, Source::Output)?; // (TO-DO-3)//////
-    let sdc_equivalent_capacity = maximum_withdrawable_(
-        SDC_CAPACITY,
-        SDC_OCCUPIED_CAPACITY,
-        SDC_ACCUMULATED_RATE,
-        withdrawing_accumulated_rate,
-    );
-
-    Ok((withdrawing_accumulated_rate, sdc_equivalent_capacity))
-}
-
-fn maximum_withdrawable_(
-    capacity: u64,
-    occupied_capacity: u64,
-    deposit_accumulated_rate: u64,
-    withdrawing_accumulated_rate: u64,
-) -> u64 {
-    (u128::from(capacity - occupied_capacity) * u128::from(withdrawing_accumulated_rate)
-        / u128::from(deposit_accumulated_rate)) as u64
-        + occupied_capacity
-}
-
-fn ickb_extra_checks(index: usize, source: Source, ickb_code_hash: &Byte32) -> Result<(), Error> {
-    if source == Source::Input {
-        return Ok(());
-    }
-
-    if cell_has_lock(index, source, ickb_code_hash)? {
-        return Err(Error::InvalidLock);
-    }
-
-    Ok(())
-}
-
-fn sdc_extra_checks(
-    _index: usize,
-    source: Source,
-    equivalent_capacity: u64,
-    sdc_equivalent_capacity: u64,
-) -> Result<(), Error> {
-    if source == Source::Input {
-        return Ok(());
-    }
-
-    if equivalent_capacity < sdc_equivalent_capacity {
-        return Err(Error::DepositTooSmall);
-    }
-
-    if equivalent_capacity > sdc_equivalent_capacity + sdc_equivalent_capacity / 1000 {
-        return Err(Error::DepositTooBig);
-    }
-
-    Ok(())
-}
-
-fn cell_has_lock(index: usize, source: Source, code_hash: &Byte32) -> Result<bool, Error> {
-    Ok(load_cell_lock_hash(index, source)?.as_slice() == code_hash.as_slice())
-}
-
-const ICKB_DATA_LEN: usize = 8; // (TO-DO-2)////////////////////////////////////
-
-fn extract_ickb_amount(index: usize, source: Source) -> Result<u64, Error> {
-    let data = load_cell_data(index, source)?;
-
-    if data.len() < ICKB_DATA_LEN {
-        return Err(Error::Encoding);
-    }
-
-    let mut buffer = [0u8; ICKB_DATA_LEN];
-    buffer.copy_from_slice(&data[0..ICKB_DATA_LEN]);
-    let amount = u64::from_le_bytes(buffer);
-
-    Ok(amount)
-}
-
-const NERVOS_DAO_DATA_LEN: usize = 8;
-
-fn extract_nervos_dao_data(index: usize, source: Source) -> Result<u64, Error> {
-    let data = load_cell_data(index, source)?;
-
-    if data.len() != NERVOS_DAO_DATA_LEN {
-        return Err(Error::Encoding);
-    }
-
-    let mut buffer = [0u8; NERVOS_DAO_DATA_LEN];
-    buffer.copy_from_slice(&data[0..NERVOS_DAO_DATA_LEN]);
-    let amount = u64::from_le_bytes(buffer);
-
-    Ok(amount)
-}
-
-fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, SysError> {
-    let dao_data = load_header(index, source)?.raw().dao();
-
-    let mut buffer = [0u8; 8];
-    buffer.copy_from_slice(&dao_data.as_slice()[8..16]);
-    let accumulated_rate = u64::from_le_bytes(buffer);
-
-    Ok(accumulated_rate)
+    return Ok(total_ickb_amount);
 }
