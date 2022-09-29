@@ -1,4 +1,4 @@
-use core::{cmp::min, result::Result};
+use core::result::Result;
 
 use ckb_std::{
     ckb_constants::Source,
@@ -31,8 +31,6 @@ pub fn main() -> Result<(), Error> {
     }
 }
 
-const ICKB_CAP_PER_RECEIPT: u64 = 10_000 * 100_000_000; // 10000 iCKB in shannons.
-
 fn check_input(ickb_code_hash: &Byte32) -> Result<(u64, u64, u64), Error> {
     let mut total_ickb_amount = 0;
     let mut total_receipts_ickb = 0;
@@ -43,19 +41,18 @@ fn check_input(ickb_code_hash: &Byte32) -> Result<(u64, u64, u64), Error> {
 
         match cell_type {
             CellType::Deposit => {
-                total_deposits_ickb +=
-                    ckb_to_ickb(index, source, extract_unused_capacity(index, source)?)?;
+                let deposit_amount = extract_unused_capacity(index, source)?;
+
+                // Convert to iCKB and apply a 10% discount for the amount exceeding the soft iCKB cap per deposit.
+                total_deposits_ickb += deposit_to_ickb(index, source, deposit_amount)?;
             }
             CellType::TokenAndReceipt => {
                 let (token_amount, receipt_amount) = extract_ickb_data(index, source)?;
 
                 total_ickb_amount += token_amount;
 
-                // Cap max ickb equivalent per receipt.
-                total_receipts_ickb += min(
-                    ckb_to_ickb(index, source, receipt_amount)?,
-                    ICKB_CAP_PER_RECEIPT,
-                );
+                // Convert to iCKB and apply a 10% fee for the amount exceeding the soft iCKB cap per deposit.
+                total_receipts_ickb += deposit_to_ickb(index, source, receipt_amount)?;
             }
             CellType::Unknown => (),
         }
@@ -65,10 +62,18 @@ fn check_input(ickb_code_hash: &Byte32) -> Result<(u64, u64, u64), Error> {
 }
 
 const GENESIS_ACCUMULATED_RATE: u128 = 10_000_000_000_000_000; // Genesis block accumulated rate.
+const ICKB_SOFT_CAP_PER_DEPOSIT: u64 = 10_000 * 100_000_000; // 10000 iCKB in shannons.
 
-fn ckb_to_ickb(index: usize, source: Source, amount: u64) -> Result<u64, Error> {
-    Ok((u128::from(amount) * GENESIS_ACCUMULATED_RATE
-        / u128::from(extract_accumulated_rate(index, source)?)) as u64)
+fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u64, Error> {
+    let ickb_amount = (u128::from(amount) * GENESIS_ACCUMULATED_RATE
+        / u128::from(extract_accumulated_rate(index, source)?)) as u64;
+
+    // Apply a 10% discount for the amount exceeding the soft iCKB cap per deposit.
+    if ickb_amount > ICKB_SOFT_CAP_PER_DEPOSIT {
+        return Ok(ickb_amount - (ickb_amount - ICKB_SOFT_CAP_PER_DEPOSIT) / 10);
+    }
+
+    return Ok(ickb_amount);
 }
 
 fn check_output(ickb_code_hash: &Byte32) -> Result<u64, Error> {
