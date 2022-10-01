@@ -4,13 +4,28 @@ use crate::error::Error;
 
 use ckb_std::{ckb_constants::Source, ckb_types::prelude::*, high_level::*};
 
-pub fn extract_ickb_data(index: usize, source: Source) -> Result<(u64, u64), Error> {
+pub fn extract_ickb_data(index: usize, source: Source) -> Result<(u64, u64, u8), Error> {
     let ickb_data = load_cell_data(index, source)?;
 
-    let token_amount = u64_from(ickb_data.as_slice(), 0)?;
-    let receipt_amount = u64_from(ickb_data.as_slice(), 8)?;
+    if ickb_data.len() < 16 {
+        return Err(Error::Encoding);
+    }
 
-    Ok((token_amount, receipt_amount))
+    // Receipt data.
+    // The 16th byte stores in a little endian the count of the contiguous deposits.
+    let receipt_count = u8::from_le_bytes([ickb_data[15]; 1]);
+
+    // From the 9th byte to the 15th is stored in a little endian the amount of a single deposit.
+    let mut buffer = [0u8; 8];
+    buffer[0..7].copy_from_slice(&ickb_data[8..15]); // The last byte is already zero.
+    let receipt_amount = u64::from_le_bytes(buffer);
+
+    // Token data.
+    // From the first byte to the 8th is stored in a little endian the amount of iCKB token.
+    buffer.copy_from_slice(&ickb_data[0..8]); // It's safe to reuse the same buffer as all bytes are overwritten.
+    let token_amount = u64::from_le_bytes(buffer);
+
+    Ok((token_amount, receipt_amount, receipt_count))
 }
 
 pub fn extract_unused_capacity(index: usize, source: Source) -> Result<u64, Error> {

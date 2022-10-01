@@ -11,9 +11,9 @@ pub enum Error {
     Amount,
     NotEmptyArgs,
     InvalidLock,
-    NoReceipt,
-    NoDeposit,
+    UnequalDeposit,
     ReceiptAmount,
+    NoReceipt,
 }
 
 impl From<SysError> for Error {

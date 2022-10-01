@@ -47,12 +47,14 @@ fn check_input(ickb_code_hash: &Byte32) -> Result<(u64, u64, u64), Error> {
                 total_deposits_ickb += deposit_to_ickb(index, source, deposit_amount)?;
             }
             CellType::TokenAndReceipt => {
-                let (token_amount, receipt_amount) = extract_ickb_data(index, source)?;
+                let (token_amount, receipt_amount, receipt_count) =
+                    extract_ickb_data(index, source)?;
 
                 total_ickb_amount += token_amount;
 
                 // Convert to iCKB and apply a 10% fee for the amount exceeding the soft iCKB cap per deposit.
-                total_receipts_ickb += deposit_to_ickb(index, source, receipt_amount)?;
+                total_receipts_ickb +=
+                    deposit_to_ickb(index, source, receipt_amount)? * (receipt_count as u64);
             }
             CellType::Unknown => (),
         }
@@ -79,30 +81,41 @@ fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u64, Err
 fn check_output(ickb_code_hash: &Byte32) -> Result<u64, Error> {
     let mut total_ickb_amount = 0;
 
-    let mut maybe_deposit_amount: Option<u64> = None;
+    let (mut deposit_count, mut deposit_amount) = (0u8, 0u64);
     for maybe_cell_info in cell_type_iter(Source::Output, &ickb_code_hash) {
         let (index, source, cell_type) = maybe_cell_info?;
 
-        // A deposit must be followed by its exact receipt.
-        match (maybe_deposit_amount, cell_type) {
-            (None, CellType::Deposit) => {
-                maybe_deposit_amount = Some(extract_unused_capacity(index, source)?);
+        // A deposit must be followed by another equal deposit or their exact receipt.
+        match cell_type {
+            CellType::Deposit => {
+                let amount = extract_unused_capacity(index, source)?;
+
+                if deposit_count == 0 {
+                    (deposit_count, deposit_amount) = (1, amount);
+                } else if deposit_amount == amount {
+                    deposit_count += 1;
+                } else {
+                    return Err(Error::UnequalDeposit);
+                }
             }
-            (Some(deposit_amount), CellType::TokenAndReceipt) => {
-                let (token_amount, receipt_amount) = extract_ickb_data(index, source)?;
+            CellType::TokenAndReceipt => {
+                let (token_amount, receipt_amount, receipt_count) =
+                    extract_ickb_data(index, source)?;
 
                 // Having this as strict check prevents accidental burns of receipts amounts.
-                if receipt_amount == deposit_amount {
-                    maybe_deposit_amount = None;
+                if (receipt_count, receipt_amount) == (deposit_count, deposit_amount) {
+                    (deposit_count, deposit_amount) = (0, 0);
                 } else {
                     return Err(Error::ReceiptAmount);
                 }
 
                 total_ickb_amount += token_amount;
             }
-            (Some(_), _) => return Err(Error::NoReceipt),
-            (None, CellType::TokenAndReceipt) => return Err(Error::NoDeposit),
-            (None, CellType::Unknown) => (),
+            CellType::Unknown => {
+                if deposit_count > 0 {
+                    return Err(Error::NoReceipt);
+                }
+            }
         }
     }
 
