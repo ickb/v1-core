@@ -3,6 +3,7 @@ use core::result::Result;
 use ckb_std::{
     ckb_constants::Source,
     ckb_types::{
+        core::ScriptHashType,
         packed::{Byte32, Script},
         prelude::*,
     },
@@ -10,8 +11,10 @@ use ckb_std::{
     syscalls::SysError,
 };
 
-use crate::error::Error;
-use crate::utils::cell_data_has_8_zeroed_bytes;
+use crate::{
+    error::Error,
+    utils::{cell_data_has_8_zeroed_bytes, from_hex},
+};
 
 pub fn cell_type_iter(source: Source, ickb_code_hash: &Byte32) -> CellTypeIter {
     CellTypeIter {
@@ -90,10 +93,21 @@ impl Iterator for CellTypeIter<'_> {
     }
 }
 
-const NERVOS_DAO_CODE_HASH: [u8; 32] = [0u8; 32]; // (TO-DO)////////////////////////////////////
-const NERVOS_DAO_HASH_TYPE: u8 = 0; // (TO-DO)////////////////////////////////////
+// From https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#example
+// > The following type script represents the Nervos DAO script on CKB mainnet:
+// > {
+// >   "code_hash": "0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e",
+// >   "args": "0x",
+// >   "hash_type": "type"
+// > }
+
+const NERVOS_DAO_CODE_HASH: [u8; 32] =
+    from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e");
+const NERVOS_DAO_ARGS_LEN: usize = 0;
+const NERVOS_DAO_HASH_TYPE: u8 = ScriptHashType::Type as u8;
 
 fn is_nervos_dao(s: &Script) -> bool {
     s.code_hash().as_slice() == NERVOS_DAO_CODE_HASH.as_slice()
+        && s.args().len() == NERVOS_DAO_ARGS_LEN
         && u8::from(s.hash_type()) == NERVOS_DAO_HASH_TYPE
 }
