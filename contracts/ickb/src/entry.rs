@@ -92,6 +92,8 @@ fn check_output(ickb_code_hash: &Byte32) -> Result<u64, Error> {
 
                 if deposit_count == 0 {
                     (deposit_count, deposit_amount) = (1, amount);
+                } else if deposit_count == u8::MAX {
+                    return Err(Error::DepositCountOverflow);
                 } else if deposit_amount == amount {
                     deposit_count += 1;
                 } else {

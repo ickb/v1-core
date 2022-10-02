@@ -11,6 +11,7 @@ pub enum Error {
     Amount,
     NotEmptyArgs,
     InvalidLock,
+    DepositCountOverflow,
     UnequalDeposit,
     ReceiptAmount,
     NoReceipt,
