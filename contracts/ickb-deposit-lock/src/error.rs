@@ -8,13 +8,7 @@ pub enum Error {
     LengthNotEnough,
     Encoding,
     // Add customized errors here...
-    Amount,
-    NotEmptyArgs,
-    InvalidLock,
-    DepositCountOverflow,
-    UnequalDeposit,
-    ReceiptAmount,
-    NoReceipt,
+    OwnerLockNotFound,
 }
 
 impl From<SysError> for Error {

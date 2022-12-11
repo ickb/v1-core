@@ -1,4 +1,4 @@
-# iCKB v1 core
+# iCKB v1.1 core
 
 Build contracts:
 

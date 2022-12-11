@@ -9,11 +9,11 @@ Parameters
 
 Licensor:             Phroi
 
-Licensed Work:        iCKB v1 core
+Licensed Work:        iCKB v1.1 core
 
 Additional Use Grant: None
 
-Change Date:          The earlier of 2026-09-01
+Change Date:          The earlier of 2026-12-01
 
 Change License:       GNU General Public License v2.0 or later
 

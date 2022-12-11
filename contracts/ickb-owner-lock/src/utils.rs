@@ -4,28 +4,30 @@ use crate::error::Error;
 
 use ckb_std::{ckb_constants::Source, ckb_types::prelude::*, high_level::*};
 
-pub fn extract_ickb_data(index: usize, source: Source) -> Result<(u64, u64, u8), Error> {
-    let ickb_data = load_cell_data(index, source)?;
+pub fn extract_token_amount(index: usize, source: Source) -> Result<u128, Error> {
+    let data = load_cell_data(index, source)?;
 
-    if ickb_data.len() < 16 {
+    if data.len() < 16 {
         return Err(Error::Encoding);
     }
 
-    // Receipt data.
-    // The 16th byte stores in a little endian the count of the contiguous deposits.
-    let receipt_count = u8::from_le_bytes([ickb_data[15]; 1]);
+    let mut buffer = [0u8; 16];
+    buffer.copy_from_slice(&data[0..16]);
+    let token_amount = u128::from_le_bytes(buffer);
 
-    // From the 9th byte to the 15th is stored in a little endian the amount of a single deposit.
-    let mut buffer = [0u8; 8];
-    buffer[0..7].copy_from_slice(&ickb_data[8..15]); // The last byte is already zero.
-    let receipt_amount = u64::from_le_bytes(buffer);
+    Ok(token_amount)
+}
 
-    // Token data.
-    // From the first byte to the 8th is stored in a little endian the amount of iCKB token.
-    buffer.copy_from_slice(&ickb_data[0..8]); // It's safe to reuse the same buffer as all bytes are overwritten.
-    let token_amount = u64::from_le_bytes(buffer);
+pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u64, u64), Error> {
+    let data = load_cell_data(index, source)?;
 
-    Ok((token_amount, receipt_amount, receipt_count))
+    // From the 1th byte to the 8th is stored in little endian the amount of a single deposit.
+    let receipt_amount = u64_from(data.as_slice(), 0)?;
+
+    // From the 9th byte to the 16th is stored in little endian the count of the contiguous deposits.
+    let receipt_count = u64_from(data.as_slice(), 8)?;
+
+    Ok((receipt_amount, receipt_count))
 }
 
 pub fn extract_unused_capacity(index: usize, source: Source) -> Result<u64, Error> {
@@ -40,11 +42,15 @@ pub fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, Err
     Ok(accumulated_rate)
 }
 
-pub fn cell_data_has_8_zeroed_bytes(index: usize, source: Source) -> bool {
+pub fn cell_data_is_8_zeroed_bytes(index: usize, source: Source) -> bool {
     let data = match load_cell_data(index, source) {
         Ok(data) => data,
         Err(_) => return false,
     };
+
+    if data.len() != 8 {
+        return false;
+    }
 
     match u64_from(data.as_slice(), 0) {
         Ok(d) => (d == 0),
