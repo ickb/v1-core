@@ -82,12 +82,16 @@ fn check_input(owner_hash: [u8; 32]) -> Result<(u128, u128, u128, u64), Error> {
     ));
 }
 
-const GENESIS_ACCUMULATED_RATE: u128 = 10_000_000_000_000_000; // Genesis block accumulated rate.
-const ICKB_SOFT_CAP_PER_DEPOSIT: u128 = 10_000 * 100_000_000; // 10000 iCKB in shannons.
+const ICKB_DECIMALS: u128 = 8; // CKB and iCKB have the same number of decimals
+const ICKB_SOFT_CAP_PER_DEPOSIT: u128 = 10_000 * 10 ^ ICKB_DECIMALS; // 10_000 iCKB.
+const GENESIS_ACCUMULATED_RATE: u128 = 10 ^ 16; // Genesis block accumulated rate.
 
 fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Error> {
-    let ickb_amount = u128::from(amount) * GENESIS_ACCUMULATED_RATE
-        / u128::from(extract_accumulated_rate(index, source)?);
+    let amount = u128::from(amount);
+    let ar_0 = GENESIS_ACCUMULATED_RATE;
+    let ar_m = u128::from(extract_accumulated_rate(index, source)?);
+
+    let ickb_amount = amount * ar_0 / ar_m;
 
     // Apply a 10% discount for the amount exceeding the soft iCKB cap per deposit.
     if ickb_amount > ICKB_SOFT_CAP_PER_DEPOSIT {
