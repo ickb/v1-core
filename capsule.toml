@@ -15,9 +15,5 @@ name = "ickb-owner-lock"
 template_type = "Rust"
 
 [[contracts]]
-name = "ickb-deposit-lock"
-template_type = "Rust"
-
-[[contracts]]
 name = "ickb-receipt"
 template_type = "Rust"

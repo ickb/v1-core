@@ -20,15 +20,17 @@ pub fn main() -> Result<(), Error> {
 
     let owner_hash = load_script_hash()?;
 
-    let (out_ickb, out_owner_locks, out_has_deposits) = check_output(owner_hash)?;
-    let (in_ickb, in_receipts_ickb, in_deposits_ickb, in_owner_locks) = check_input(owner_hash)?;
+    let (out_ickb, out_public_owner_cells, out_has_deposits) = check_output(owner_hash)?;
+    let (in_ickb, in_receipts_ickb, in_deposits_ickb, in_public_owner_cells) =
+        check_input(owner_hash)?;
 
-    // Only one owner lock.
-    if in_owner_locks != 1 || out_owner_locks != 1 {
+    // Public owner cell cannot be consumed without re-creating a new one in the outputs.
+    // At maximum one public owner cell can be consumed by a transaction (prevents DoS).
+    if in_public_owner_cells > 1 || in_public_owner_cells > out_public_owner_cells {
         return Err(Error::ScriptMisuse);
     }
 
-    // Owner lock should be included only in governance transactions
+    // Owner lock should be included only in governance transactions.
     if !out_has_deposits && in_receipts_ickb == 0 && in_deposits_ickb == 0 {
         return Err(Error::ScriptMisuse);
     }
@@ -45,7 +47,7 @@ fn check_input(owner_hash: [u8; 32]) -> Result<(u128, u128, u128, u64), Error> {
     let mut total_ickb_amount = 0;
     let mut total_receipts_ickb = 0;
     let mut total_deposits_ickb = 0;
-    let mut total_owner_locks = 0;
+    let mut total_public_owner_cells = 0;
 
     for maybe_cell_info in cell_type_iter(Source::Output, owner_hash) {
         let (index, source, cell_type) = maybe_cell_info?;
@@ -67,8 +69,8 @@ fn check_input(owner_hash: [u8; 32]) -> Result<(u128, u128, u128, u64), Error> {
             CellType::Token => {
                 total_ickb_amount += extract_token_amount(index, source)?;
             }
-            CellType::Owner => {
-                total_owner_locks += 1;
+            CellType::PublicOwner => {
+                total_public_owner_cells += 1;
             }
             CellType::Unknown => (),
         }
@@ -78,7 +80,7 @@ fn check_input(owner_hash: [u8; 32]) -> Result<(u128, u128, u128, u64), Error> {
         total_ickb_amount,
         total_receipts_ickb,
         total_deposits_ickb,
-        total_owner_locks,
+        total_public_owner_cells,
     ));
 }
 
@@ -103,7 +105,7 @@ fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Er
 
 fn check_output(owner_hash: [u8; 32]) -> Result<(u128, u64, bool), Error> {
     let mut total_ickb_amount = 0;
-    let mut total_owner_locks = 0;
+    let mut total_public_owner_cells = 0;
     let mut has_deposits = false;
 
     let (mut deposit_count, mut deposit_amount) = (0u64, 0u64);
@@ -142,12 +144,12 @@ fn check_output(owner_hash: [u8; 32]) -> Result<(u128, u64, bool), Error> {
             (CellType::Token, 0) => {
                 total_ickb_amount += extract_token_amount(index, source)?;
             }
-            (CellType::Owner, 0) => {
-                total_owner_locks += 1;
+            (CellType::PublicOwner, 0) => {
+                total_public_owner_cells += 1;
             }
             (CellType::Unknown, 0) => {}
         }
     }
 
-    return Ok((total_ickb_amount, total_owner_locks, has_deposits));
+    return Ok((total_ickb_amount, total_public_owner_cells, has_deposits));
 }

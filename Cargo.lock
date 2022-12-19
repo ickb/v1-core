@@ -646,13 +646,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ickb-deposit-lock"
-version = "1.1.0"
-dependencies = [
- "ckb-std",
-]
-
-[[package]]
 name = "ickb-owner-lock"
 version = "1.1.0"
 dependencies = [

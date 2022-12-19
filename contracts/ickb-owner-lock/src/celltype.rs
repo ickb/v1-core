@@ -30,7 +30,7 @@ pub enum CellType {
     Deposit,
     Receipt,
     Token,
-    Owner,
+    PublicOwner,
 }
 
 impl Iterator for CellTypeIter {
@@ -40,7 +40,7 @@ impl Iterator for CellTypeIter {
     // Returns an error in case of preventable iCKB scripts misuse in output cells.
     fn next(&mut self) -> Option<Self::Item> {
         let index = self.next_index;
-        let mut ok = |cell_type| { 
+        let mut ok = |cell_type| {
             self.next_index += 1;
             Some(Ok((index, self.source, cell_type)))
         };
@@ -64,12 +64,28 @@ impl Iterator for CellTypeIter {
             }
         };
 
-        if lock_script_type == ScriptType::DepositLock
-        && type_script_type == ScriptType::NervosDaoType
-        // This condition checks that's a deposit, not a withdrawal.
-        && cell_data_is_8_zeroed_bytes(index, self.source)
-        {
-            return ok(CellType::Deposit);
+        if lock_script_type == ScriptType::OwnerLock {
+            if type_script_type == ScriptType::NervosDaoType
+            // This condition checks that's a deposit, not a withdrawal.
+            && cell_data_is_8_zeroed_bytes(index, self.source)
+            {
+                return ok(CellType::Deposit);
+            }
+
+            // Type script must be void for being a Public Owner cell.
+            if type_script_type == ScriptType::None {
+                return ok(CellType::PublicOwner);
+            }
+
+            //Let the possibility open for other future uses of the Owner Lock.
+            if type_script_type == ScriptType::Unknown {
+                return ok(CellType::Unknown);
+            }
+
+            // Prevent malformed output cells having OwnerLock as lock and an iCKB script as type.
+            if self.source != Source::Input {
+                return err(Error::ScriptMisuse);
+            }
         }
 
         if type_script_type == ScriptType::ReceiptType {
@@ -80,13 +96,7 @@ impl Iterator for CellTypeIter {
             return ok(CellType::Token);
         }
 
-        if lock_script_type == ScriptType::OwnerLock 
-        // Type script must be void.
-        && type_script_type == ScriptType::None {
-            return ok(CellType::Owner);
-        }
-
-        // Return no error if some iCKB scripts are misused in input cells, just not account for them. 
+        // Return no error if some iCKB scripts are misused in input cells, just not account for them.
         // In this way the CKB locked in these malformed cells can be retrieved.
         if self.source == Source::Input {
             return ok(CellType::Unknown);
@@ -109,27 +119,26 @@ enum ScriptType {
     None,
     Unknown,
     NervosDaoType,
-    DepositLock,
     ReceiptType,
     TokenType,
     OwnerLock,
 }
 
 //To be calculated ///////////////////////////////////////
-const NERVOS_DAO_TYPE_HASH: [u8; 32] = from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2a");
-const DEPOSIT_LOCK_HASH: [u8; 32] = from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2b");
-const RECEIPT_TYPE_HASH: [u8; 32] = from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2c");
-const TOKEN_TYPE_HASH: [u8; 32] = from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2d");
+const NERVOS_DAO_TYPE_HASH: [u8; 32] =
+    from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2a");
+const RECEIPT_TYPE_HASH: [u8; 32] =
+    from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2c");
+const TOKEN_TYPE_HASH: [u8; 32] =
+    from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2d");
 
 fn script_type_(script_hash: [u8; 32], owner_lock_hash: [u8; 32]) -> ScriptType {
-    
     if script_hash == owner_lock_hash {
         return ScriptType::OwnerLock;
     }
 
     match script_hash {
         NERVOS_DAO_TYPE_HASH => ScriptType::NervosDaoType,
-        DEPOSIT_LOCK_HASH => ScriptType::DepositLock,
         RECEIPT_TYPE_HASH => ScriptType::ReceiptType,
         TOKEN_TYPE_HASH => ScriptType::TokenType,
         _ => ScriptType::Unknown,
