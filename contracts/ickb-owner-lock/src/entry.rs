@@ -89,6 +89,8 @@ fn check_input(owner_hash: [u8; 32]) -> Result<(u128, u128, u128, u64), Error> {
     ));
 }
 
+const CKB_DECIMALS: u64 = 8;
+const CKB_MINIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT: u64 = 82 * 10 ^ CKB_DECIMALS; // 82 CKB
 const ICKB_DECIMALS: u128 = 8; // CKB and iCKB have the same number of decimals
 const ICKB_SOFT_CAP_PER_DEPOSIT: u128 = 10_000 * 10 ^ ICKB_DECIMALS; // 10_000 iCKB.
 const GENESIS_ACCUMULATED_RATE: u128 = 10 ^ 16; // Genesis block accumulated rate.
@@ -123,6 +125,9 @@ fn check_output(owner_hash: [u8; 32]) -> Result<(u128, u64, bool), Error> {
         match (cell_type, deposit_count) {
             (CellType::Deposit, 0) => {
                 let amount = extract_unused_capacity(index, source)?;
+                if amount < CKB_MINIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT {
+                    return Err(Error::DepositTooSmall);
+                }
                 (deposit_count, deposit_amount) = (1, amount);
             }
             (CellType::Deposit, ..) => {
