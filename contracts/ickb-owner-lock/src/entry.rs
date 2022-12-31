@@ -20,15 +20,8 @@ pub fn main() -> Result<(), Error> {
 
     let owner_hash = load_script_hash()?;
 
-    let (out_ickb, out_public_owner_cells, out_has_deposits) = check_output(owner_hash)?;
-    let (in_ickb, in_receipts_ickb, in_deposits_ickb, in_public_owner_cells) =
-        check_input(owner_hash)?;
-
-    // Public owner cell cannot be consumed without re-creating a new one in the outputs.
-    // At maximum one public owner cell can be consumed by a transaction (prevents DoS).
-    if in_public_owner_cells > 1 || in_public_owner_cells > out_public_owner_cells {
-        return Err(Error::ScriptMisuse);
-    }
+    let (out_ickb, out_has_deposits) = check_output(owner_hash)?;
+    let (in_ickb, in_receipts_ickb, in_deposits_ickb) = check_input(owner_hash)?;
 
     // Owner lock should be included only in governance transactions.
     if !out_has_deposits && in_receipts_ickb == 0 && in_deposits_ickb == 0 {
@@ -44,11 +37,10 @@ pub fn main() -> Result<(), Error> {
     }
 }
 
-fn check_input(owner_hash: [u8; 32]) -> Result<(u128, u128, u128, u64), Error> {
+fn check_input(owner_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
     let mut total_ickb_amount = 0;
     let mut total_receipts_ickb = 0;
     let mut total_deposits_ickb = 0;
-    let mut total_public_owner_cells = 0;
 
     for maybe_cell_info in cell_type_iter(Source::Output, owner_hash) {
         let (index, source, cell_type) = maybe_cell_info?;
@@ -73,20 +65,11 @@ fn check_input(owner_hash: [u8; 32]) -> Result<(u128, u128, u128, u64), Error> {
                 // Note on Overflow: u64 quantities represented with u128, no overflow is possible.
                 total_ickb_amount += extract_token_amount(index, source)?;
             }
-            CellType::PublicOwner => {
-                // Note on Overflow: even locking the total CKB supply in PublicOwner cells can't overflow this counter.
-                total_public_owner_cells += 1;
-            }
             CellType::Unknown => (),
         }
     }
 
-    return Ok((
-        total_ickb_amount,
-        total_receipts_ickb,
-        total_deposits_ickb,
-        total_public_owner_cells,
-    ));
+    return Ok((total_ickb_amount, total_receipts_ickb, total_deposits_ickb));
 }
 
 const CKB_DECIMALS: u64 = 8;
@@ -112,9 +95,8 @@ fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Er
     return Ok(ickb_amount);
 }
 
-fn check_output(owner_hash: [u8; 32]) -> Result<(u128, u64, bool), Error> {
+fn check_output(owner_hash: [u8; 32]) -> Result<(u128, bool), Error> {
     let mut total_ickb_amount = 0;
-    let mut total_public_owner_cells = 0;
     let mut has_deposits = false;
 
     let (mut deposit_count, mut deposit_amount) = (0u64, 0u64);
@@ -158,13 +140,9 @@ fn check_output(owner_hash: [u8; 32]) -> Result<(u128, u64, bool), Error> {
                 // Note on Overflow: u64 quantities represented with u128, no overflow is possible.
                 total_ickb_amount += extract_token_amount(index, source)?;
             }
-            (CellType::PublicOwner, 0) => {
-                // Note on Overflow: even locking the total CKB supply in PublicOwner cells can't overflow this counter.
-                total_public_owner_cells += 1;
-            }
             (CellType::Unknown, 0) => {}
         }
     }
 
-    return Ok((total_ickb_amount, total_public_owner_cells, has_deposits));
+    return Ok((total_ickb_amount, has_deposits));
 }

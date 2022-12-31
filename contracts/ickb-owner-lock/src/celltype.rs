@@ -30,7 +30,6 @@ pub enum CellType {
     Deposit,
     Receipt,
     Token,
-    PublicOwner,
 }
 
 impl Iterator for CellTypeIter {
@@ -72,13 +71,9 @@ impl Iterator for CellTypeIter {
                 return ok(CellType::Deposit);
             }
 
-            // Type script must be void for being a Public Owner cell.
-            if type_script_type == ScriptType::None {
-                return ok(CellType::PublicOwner);
-            }
-
-            //Let the possibility open for other future uses of the Owner Lock.
-            if type_script_type == ScriptType::Unknown {
+            // Other valid cells with Owner Lock.
+            // Keep ScriptType::None as valid use case? /////////////////////////////////////////////////
+            if type_script_type == ScriptType::None || type_script_type == ScriptType::Unknown {
                 return ok(CellType::Unknown);
             }
 
