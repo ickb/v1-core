@@ -9,7 +9,6 @@ pub enum Error {
     Encoding,
     // Add customized errors here...
     Amount,
-    NotEmptyArgs,
     ScriptMisuse,
     DepositTooSmall,
     UnequalDeposit,
