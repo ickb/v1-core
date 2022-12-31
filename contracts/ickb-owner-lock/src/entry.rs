@@ -1,10 +1,6 @@
 use core::result::Result;
 
-use ckb_std::{
-    ckb_constants::Source,
-    ckb_types::{bytes::Bytes, prelude::*},
-    high_level::{load_script, load_script_hash},
-};
+use ckb_std::{ckb_constants::Source, high_level::load_script_hash};
 
 use crate::celltype::{cell_type_iter, CellType};
 use crate::error::Error;
@@ -13,10 +9,12 @@ use crate::utils::{
 };
 
 pub fn main() -> Result<(), Error> {
-    let args: Bytes = load_script()?.args().unpack();
-    if !args.is_empty() {
-        return Err(Error::NotEmptyArgs);
-    }
+    // This script should have empty args, but do not check if args is empty as:
+    // - If it is empty, it's valid and other iCKB script recognize it as valid.
+    // - If it is not empty, other iCKB scripts do not recognize it as Owner Lock,
+    //   as for a transaction to be valid must be present in input an Owner lock
+    //   with empty args. This make possible to retrieve CKB used for state rent
+    //   in a malformed Owner Lock
 
     let owner_hash = load_script_hash()?;
 
