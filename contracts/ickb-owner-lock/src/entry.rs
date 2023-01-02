@@ -74,7 +74,7 @@ fn check_input(owner_code_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
 const CKB_DECIMALS: u64 = 8;
 const CKB_MINIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT: u64 = 82 * 10 ^ CKB_DECIMALS; // 82 CKB
 const ICKB_DECIMALS: u128 = 8; // CKB and iCKB have the same number of decimals
-const ICKB_SOFT_CAP_PER_DEPOSIT: u128 = 10_000 * 10 ^ ICKB_DECIMALS; // 10_000 iCKB.
+const ICKB_SOFT_CAP_PER_DEPOSIT: u128 = 100_000 * 10 ^ ICKB_DECIMALS; // 100_000 iCKB.
 const GENESIS_ACCUMULATED_RATE: u128 = 10 ^ 16; // Genesis block accumulated rate.
 
 fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Error> {
