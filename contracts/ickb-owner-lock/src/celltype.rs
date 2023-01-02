@@ -167,13 +167,6 @@ fn script_type_(script: &Script, owner_code_hash: [u8; 32]) -> ScriptType {
 }
 
 // From https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#example
-// > The following type script represents the Nervos DAO script on CKB mainnet:
-// > {
-// >   "code_hash": "0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e",
-// >   "args": "0x",
-// >   "hash_type": "type"
-// > }
-
 const NERVOS_DAO_CODE_HASH: [u8; 32] =
     from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e");
 const NERVOS_DAO_HASH_TYPE: u8 = ScriptHashType::Type as u8;
@@ -185,7 +178,7 @@ const RECEIPT_TYPE_CODE_HASH: [u8; 32] =
 const RECEIPT_TYPE_HASH_TYPE: u8 = ScriptHashType::Data1 as u8;
 const RECEIPT_TYPE_ARGS_LEN: usize = 32;
 
-// From https://github.com/lay2dev/pw-core/blob/master/src/constants.ts#L29-L42
+// From https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0025-simple-udt/0025-simple-udt.md#notes
 const TOKEN_TYPE_CODE_HASH: [u8; 32] =
     from_hex("0x5e7a36a77e68eecc013dfa2fe6a23f3b6c344b04005808694ae6dd45eea4cfd5");
 const TOKEN_TYPE_HASH_TYPE: u8 = ScriptHashType::Type as u8;
