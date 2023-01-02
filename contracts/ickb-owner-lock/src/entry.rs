@@ -1,6 +1,7 @@
 use core::result::Result;
 
-use ckb_std::{ckb_constants::Source, high_level::load_script_hash};
+use ckb_std::ckb_types::prelude::Entity;
+use ckb_std::{ckb_constants::Source, high_level::load_script};
 
 use crate::celltype::{cell_type_iter, CellType};
 use crate::error::Error;
@@ -16,10 +17,10 @@ pub fn main() -> Result<(), Error> {
     //   with empty args. This make possible to retrieve CKB used for state rent
     //   in a malformed Owner Lock
 
-    let owner_hash = load_script_hash()?;
+    let owner_code_hash: [u8; 32] = load_script()?.code_hash().as_slice().try_into().unwrap();
 
-    let (out_ickb, out_has_deposits) = check_output(owner_hash)?;
-    let (in_ickb, in_receipts_ickb, in_deposits_ickb) = check_input(owner_hash)?;
+    let (out_ickb, out_has_deposits) = check_output(owner_code_hash)?;
+    let (in_ickb, in_receipts_ickb, in_deposits_ickb) = check_input(owner_code_hash)?;
 
     // Owner lock should be included only in governance transactions.
     if !out_has_deposits && in_receipts_ickb == 0 && in_deposits_ickb == 0 {
@@ -35,12 +36,12 @@ pub fn main() -> Result<(), Error> {
     }
 }
 
-fn check_input(owner_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
+fn check_input(owner_code_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
     let mut total_ickb_amount = 0;
     let mut total_receipts_ickb = 0;
     let mut total_deposits_ickb = 0;
 
-    for maybe_cell_info in cell_type_iter(Source::Output, owner_hash) {
+    for maybe_cell_info in cell_type_iter(Source::Output, owner_code_hash) {
         let (index, source, cell_type) = maybe_cell_info?;
 
         match cell_type {
@@ -93,12 +94,12 @@ fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Er
     return Ok(ickb_amount);
 }
 
-fn check_output(owner_hash: [u8; 32]) -> Result<(u128, bool), Error> {
+fn check_output(owner_code_hash: [u8; 32]) -> Result<(u128, bool), Error> {
     let mut total_ickb_amount = 0;
     let mut has_deposits = false;
 
     let (mut deposit_count, mut deposit_amount) = (0u64, 0u64);
-    for maybe_cell_info in cell_type_iter(Source::Output, owner_hash) {
+    for maybe_cell_info in cell_type_iter(Source::Output, owner_code_hash) {
         let (index, source, cell_type) = maybe_cell_info?;
 
         // A deposit must be followed by another equal deposit or their exact receipt.

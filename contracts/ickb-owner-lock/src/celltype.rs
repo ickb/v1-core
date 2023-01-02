@@ -2,7 +2,8 @@ use core::result::Result;
 
 use ckb_std::{
     ckb_constants::Source,
-    high_level::{load_cell_lock_hash, load_cell_type_hash},
+    ckb_types::{core::ScriptHashType, packed::Script, prelude::*},
+    high_level::{load_cell_lock, load_cell_type},
     syscalls::SysError,
 };
 
@@ -11,18 +12,18 @@ use crate::{
     utils::{cell_data_is_8_zeroed_bytes, from_hex},
 };
 
-pub fn cell_type_iter(source: Source, owner_lock_hash: [u8; 32]) -> CellTypeIter {
+pub fn cell_type_iter(source: Source, owner_code_hash: [u8; 32]) -> CellTypeIter {
     CellTypeIter {
         next_index: 0,
         source,
-        owner_lock_hash,
+        owner_code_hash,
     }
 }
 
 pub struct CellTypeIter {
     next_index: usize,
     source: Source,
-    owner_lock_hash: [u8; 32],
+    owner_code_hash: [u8; 32],
 }
 
 pub enum CellType {
@@ -46,19 +47,21 @@ impl Iterator for CellTypeIter {
         let err = |e| Some(Err(e));
 
         let (lock_script_type, type_script_type) = match (
-            load_cell_lock_hash(index, self.source),
-            load_cell_type_hash(index, self.source),
+            load_cell_lock(index, self.source),
+            load_cell_type(index, self.source),
         ) {
             // No more cells.
             (Err(SysError::IndexOutOfBound), ..) => return None,
             // Unknown error.
             (Err(e), ..) | (.., Err(e)) => return err(Error::from(e)),
             // A new cell exists.
-            (Ok(lock_script_hash), Ok(maybe_type_script_hash)) => {
-                let script_type = |script_hash| script_type_(script_hash, self.owner_lock_hash);
+            (Ok(lock_script), Ok(maybe_type_script)) => {
+                let script_type = |script| script_type_(script, self.owner_code_hash);
                 (
-                    script_type(lock_script_hash),
-                    maybe_type_script_hash.map_or(ScriptType::None, script_type),
+                    script_type(&lock_script),
+                    maybe_type_script
+                        .as_ref()
+                        .map_or(ScriptType::None, script_type),
                 )
             }
         };
@@ -117,25 +120,76 @@ enum ScriptType {
     ReceiptType,
     TokenType,
     OwnerLock,
+    Malformed,
 }
 
-//To be calculated ///////////////////////////////////////
-const NERVOS_DAO_TYPE_HASH: [u8; 32] =
-    from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2a");
-const RECEIPT_TYPE_HASH: [u8; 32] =
-    from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2c");
-const TOKEN_TYPE_HASH: [u8; 32] =
-    from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2d");
+fn script_type_(script: &Script, owner_code_hash: [u8; 32]) -> ScriptType {
+    let code_hash: [u8; 32] = script.code_hash().as_slice().try_into().unwrap();
+    let hash_type = u8::from(script.hash_type());
+    let args = script.args().as_slice().to_vec();
+    let args_len = args.len();
 
-fn script_type_(script_hash: [u8; 32], owner_lock_hash: [u8; 32]) -> ScriptType {
-    if script_hash == owner_lock_hash {
-        return ScriptType::OwnerLock;
+    if NERVOS_DAO_CODE_HASH == code_hash {
+        if NERVOS_DAO_HASH_TYPE == hash_type && NERVOS_DAO_ARGS_LEN == args_len {
+            return ScriptType::NervosDaoType;
+        }
+        return ScriptType::Malformed;
     }
 
-    match script_hash {
-        NERVOS_DAO_TYPE_HASH => ScriptType::NervosDaoType,
-        RECEIPT_TYPE_HASH => ScriptType::ReceiptType,
-        TOKEN_TYPE_HASH => ScriptType::TokenType,
-        _ => ScriptType::Unknown,
+    if RECEIPT_TYPE_CODE_HASH == code_hash {
+        if RECEIPT_TYPE_HASH_TYPE == hash_type
+            && RECEIPT_TYPE_ARGS_LEN == args_len
+            && owner_code_hash.as_slice() == args.as_slice()
+        {
+            return ScriptType::ReceiptType;
+        }
+        return ScriptType::Malformed;
     }
+
+    if TOKEN_TYPE_CODE_HASH == code_hash {
+        if TOKEN_TYPE_HASH_TYPE == hash_type
+            && TOKEN_TYPE_ARGS_LEN == args_len
+            && owner_code_hash.as_slice() == args.as_slice()
+        {
+            return ScriptType::TokenType;
+        }
+        return ScriptType::Malformed;
+    }
+
+    if owner_code_hash == code_hash {
+        if OWNER_LOCK_HASH_TYPE == hash_type && OWNER_LOCK_ARGS_LEN == args_len {
+            return ScriptType::OwnerLock;
+        }
+        return ScriptType::Malformed;
+    }
+
+    return ScriptType::Unknown;
 }
+
+// From https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#example
+// > The following type script represents the Nervos DAO script on CKB mainnet:
+// > {
+// >   "code_hash": "0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e",
+// >   "args": "0x",
+// >   "hash_type": "type"
+// > }
+
+const NERVOS_DAO_CODE_HASH: [u8; 32] =
+    from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e");
+const NERVOS_DAO_HASH_TYPE: u8 = ScriptHashType::Type as u8;
+const NERVOS_DAO_ARGS_LEN: usize = 0;
+
+// To be calculated /////////////////////////////////////////////////////////////////////
+const RECEIPT_TYPE_CODE_HASH: [u8; 32] =
+    from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2f");
+const RECEIPT_TYPE_HASH_TYPE: u8 = ScriptHashType::Data1 as u8;
+const RECEIPT_TYPE_ARGS_LEN: usize = 32;
+
+// From https://github.com/lay2dev/pw-core/blob/master/src/constants.ts#L29-L42
+const TOKEN_TYPE_CODE_HASH: [u8; 32] =
+    from_hex("0x5e7a36a77e68eecc013dfa2fe6a23f3b6c344b04005808694ae6dd45eea4cfd5");
+const TOKEN_TYPE_HASH_TYPE: u8 = ScriptHashType::Type as u8;
+const TOKEN_TYPE_ARGS_LEN: usize = 32;
+
+const OWNER_LOCK_HASH_TYPE: u8 = ScriptHashType::Data1 as u8;
+const OWNER_LOCK_ARGS_LEN: usize = 0;
