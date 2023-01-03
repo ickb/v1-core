@@ -12,18 +12,18 @@ use crate::{
     utils::{cell_data_is_8_zeroed_bytes, from_hex},
 };
 
-pub fn cell_type_iter(source: Source, owner_code_hash: [u8; 32]) -> CellTypeIter {
+pub fn cell_type_iter(source: Source, ickb_code_hash: [u8; 32]) -> CellTypeIter {
     CellTypeIter {
         next_index: 0,
         source,
-        owner_code_hash,
+        ickb_code_hash,
     }
 }
 
 pub struct CellTypeIter {
     next_index: usize,
     source: Source,
-    owner_code_hash: [u8; 32],
+    ickb_code_hash: [u8; 32],
 }
 
 pub enum CellType {
@@ -56,7 +56,7 @@ impl Iterator for CellTypeIter {
             (Err(e), ..) | (.., Err(e)) => return err(Error::from(e)),
             // A new cell exists.
             (Ok(lock_script), Ok(maybe_type_script)) => {
-                let script_type = |script| script_type_(script, self.owner_code_hash);
+                let script_type = |script| script_type_(script, self.ickb_code_hash);
                 (
                     script_type(&lock_script),
                     maybe_type_script
@@ -66,7 +66,7 @@ impl Iterator for CellTypeIter {
             }
         };
 
-        if lock_script_type == ScriptType::OwnerLock {
+        if lock_script_type == ScriptType::ICKBScript {
             if type_script_type == ScriptType::NervosDaoType
             // This condition checks that's a deposit, not a withdrawal.
             && cell_data_is_8_zeroed_bytes(index, self.source)
@@ -74,19 +74,19 @@ impl Iterator for CellTypeIter {
                 return ok(CellType::Deposit);
             }
 
-            // Other valid cells with Owner Lock.
+            // Other valid cells with iCKB Script as Lock
             // Keep ScriptType::None as valid use case? /////////////////////////////////////////////////
             if type_script_type == ScriptType::None || type_script_type == ScriptType::Unknown {
                 return ok(CellType::Unknown);
             }
 
-            // Prevent malformed output cells having OwnerLock as lock and an iCKB script as type.
+            // Prevent malformed output cells having ICKBScript as lock and and well known scripts as type.
             if self.source != Source::Input {
                 return err(Error::ScriptMisuse);
             }
         }
 
-        if type_script_type == ScriptType::ReceiptType {
+        if type_script_type == ScriptType::ICKBScript {
             return ok(CellType::Receipt);
         }
 
@@ -117,13 +117,12 @@ enum ScriptType {
     None,
     Unknown,
     NervosDaoType,
-    ReceiptType,
     TokenType,
-    OwnerLock,
+    ICKBScript,
     Malformed,
 }
 
-fn script_type_(script: &Script, owner_code_hash: [u8; 32]) -> ScriptType {
+fn script_type_(script: &Script, ickb_code_hash: [u8; 32]) -> ScriptType {
     let code_hash: [u8; 32] = script.code_hash().as_slice().try_into().unwrap();
     let hash_type = u8::from(script.hash_type());
     let args = script.args().as_slice().to_vec();
@@ -136,29 +135,19 @@ fn script_type_(script: &Script, owner_code_hash: [u8; 32]) -> ScriptType {
         return ScriptType::Malformed;
     }
 
-    if RECEIPT_TYPE_CODE_HASH == code_hash {
-        if RECEIPT_TYPE_HASH_TYPE == hash_type
-            && RECEIPT_TYPE_ARGS_LEN == args_len
-            && owner_code_hash.as_slice() == args.as_slice()
-        {
-            return ScriptType::ReceiptType;
-        }
-        return ScriptType::Malformed;
-    }
-
     if TOKEN_TYPE_CODE_HASH == code_hash {
         if TOKEN_TYPE_HASH_TYPE == hash_type
             && TOKEN_TYPE_ARGS_LEN == args_len
-            && owner_code_hash.as_slice() == args.as_slice()
+            && ickb_code_hash.as_slice() == args.as_slice()
         {
             return ScriptType::TokenType;
         }
         return ScriptType::Malformed;
     }
 
-    if owner_code_hash == code_hash {
-        if OWNER_LOCK_HASH_TYPE == hash_type && OWNER_LOCK_ARGS_LEN == args_len {
-            return ScriptType::OwnerLock;
+    if ickb_code_hash == code_hash {
+        if ICKB_SCRIPT_HASH_TYPE == hash_type && ICKB_SCRIPT_ARGS_LEN == args_len {
+            return ScriptType::ICKBScript;
         }
         return ScriptType::Malformed;
     }
@@ -172,17 +161,11 @@ const NERVOS_DAO_CODE_HASH: [u8; 32] =
 const NERVOS_DAO_HASH_TYPE: u8 = ScriptHashType::Type as u8;
 const NERVOS_DAO_ARGS_LEN: usize = 0;
 
-// To be calculated /////////////////////////////////////////////////////////////////////
-const RECEIPT_TYPE_CODE_HASH: [u8; 32] =
-    from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2f");
-const RECEIPT_TYPE_HASH_TYPE: u8 = ScriptHashType::Data1 as u8;
-const RECEIPT_TYPE_ARGS_LEN: usize = 32;
-
 // From https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0025-simple-udt/0025-simple-udt.md#notes
 const TOKEN_TYPE_CODE_HASH: [u8; 32] =
     from_hex("0x5e7a36a77e68eecc013dfa2fe6a23f3b6c344b04005808694ae6dd45eea4cfd5");
 const TOKEN_TYPE_HASH_TYPE: u8 = ScriptHashType::Type as u8;
 const TOKEN_TYPE_ARGS_LEN: usize = 32;
 
-const OWNER_LOCK_HASH_TYPE: u8 = ScriptHashType::Data1 as u8;
-const OWNER_LOCK_ARGS_LEN: usize = 0;
+const ICKB_SCRIPT_HASH_TYPE: u8 = ScriptHashType::Data1 as u8;
+const ICKB_SCRIPT_ARGS_LEN: usize = 0;

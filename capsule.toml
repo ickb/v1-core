@@ -11,9 +11,6 @@ version = "0.8.0"
 deployment = "deployment.toml"
 
 [[contracts]]
-name = "ickb-owner-lock"
+name = "ickb"
 template_type = "Rust"
 
-[[contracts]]
-name = "ickb-receipt"
-template_type = "Rust"
