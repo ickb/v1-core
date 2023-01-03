@@ -142,7 +142,8 @@ fn script_type_(script: &Script, ickb_code_hash: [u8; 32]) -> ScriptType {
         {
             return ScriptType::TokenType;
         }
-        return ScriptType::Malformed;
+        // Allow external tokens in the transaction
+        return ScriptType::Unknown;
     }
 
     if ickb_code_hash == code_hash {
