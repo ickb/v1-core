@@ -10,22 +10,13 @@ use crate::utils::{
 };
 
 pub fn main() -> Result<(), Error> {
-    // This script should have empty args, but do not check if args is empty as:
-    // - If it is empty, it's valid and other iCKB script recognize it as valid.
-    // - If it is not empty, other iCKB scripts do not recognize it as Owner Lock,
-    //   as for a transaction to be valid must be present in input an Owner lock
-    //   with empty args. This make possible to retrieve CKB used for state rent
-    //   in a malformed Owner Lock
+    // This script should have empty args, but it's actually irrelevant as they are not used in the code.
+    // How should be handled non-empty args? What changes from the security standpoint?
 
-    let owner_code_hash: [u8; 32] = load_script()?.code_hash().as_slice().try_into().unwrap();
+    let ickb_code_hash: [u8; 32] = load_script()?.code_hash().as_slice().try_into().unwrap();
 
-    let (out_ickb, out_has_deposits) = check_output(owner_code_hash)?;
-    let (in_ickb, in_receipts_ickb, in_deposits_ickb) = check_input(owner_code_hash)?;
-
-    // Owner lock should be included only in governance transactions.
-    if !out_has_deposits && in_receipts_ickb == 0 && in_deposits_ickb == 0 {
-        return Err(Error::ScriptMisuse);
-    }
+    let out_ickb = check_output(ickb_code_hash)?;
+    let (in_ickb, in_receipts_ickb, in_deposits_ickb) = check_input(ickb_code_hash)?;
 
     // Receipts are not transferrable, only convertible.
     // Note on Overflow: u64 quantities represented with u128, no overflow is possible.
@@ -36,12 +27,12 @@ pub fn main() -> Result<(), Error> {
     }
 }
 
-fn check_input(owner_code_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
+fn check_input(ickb_code_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
     let mut total_ickb_amount = 0;
     let mut total_receipts_ickb = 0;
     let mut total_deposits_ickb = 0;
 
-    for maybe_cell_info in cell_type_iter(Source::Output, owner_code_hash) {
+    for maybe_cell_info in cell_type_iter(Source::Output, ickb_code_hash) {
         let (index, source, cell_type) = maybe_cell_info?;
 
         match cell_type {
@@ -94,12 +85,11 @@ fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Er
     return Ok(ickb_amount);
 }
 
-fn check_output(owner_code_hash: [u8; 32]) -> Result<(u128, bool), Error> {
+fn check_output(ickb_code_hash: [u8; 32]) -> Result<u128, Error> {
     let mut total_ickb_amount = 0;
-    let mut has_deposits = false;
 
     let (mut deposit_count, mut deposit_amount) = (0u64, 0u64);
-    for maybe_cell_info in cell_type_iter(Source::Output, owner_code_hash) {
+    for maybe_cell_info in cell_type_iter(Source::Output, ickb_code_hash) {
         let (index, source, cell_type) = maybe_cell_info?;
 
         // A deposit must be followed by another equal deposit or their exact receipt.
@@ -127,7 +117,6 @@ fn check_output(owner_code_hash: [u8; 32]) -> Result<(u128, bool), Error> {
                 let (receipt_amount, receipt_count) = extract_receipt_data(index, source)?;
                 if (receipt_count, receipt_amount) == (deposit_count, deposit_amount) {
                     (deposit_count, deposit_amount) = (0, 0);
-                    has_deposits = true;
                 } else {
                     return Err(Error::ReceiptAmount);
                 }
@@ -143,5 +132,5 @@ fn check_output(owner_code_hash: [u8; 32]) -> Result<(u128, bool), Error> {
         }
     }
 
-    return Ok((total_ickb_amount, has_deposits));
+    return Ok(total_ickb_amount);
 }
