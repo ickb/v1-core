@@ -10,8 +10,29 @@ use crate::utils::{
 };
 
 pub fn main() -> Result<(), Error> {
-    // This script should have empty args, but it's actually irrelevant as they are not used in the code.
-    // How should be handled non-empty args? What changes from the security standpoint?
+    // This script does not use args, so they should be empty.
+    //
+    // Validating args emptiness here would mean any iCKB Lock script created
+    // with non empty arg can't be garbage collected.
+    //
+    // So let's analyze how non empty args can come to happen and what's their lifecycle.
+    //
+    // Executing iCKB Script actively invalidates transactions with malformed iCKB script in output.
+    // iCKB script with non empty args is considered malformed, so to create one the iCKB Script must
+    // not be executed, this exclude all the transactions that include:
+    // - iCKB Script used as Type Script in Receipt cells.
+    // - iCKB Script used as Lock Script in any input cell.
+    //
+    // A user can still create such a malformed cell but only in isolation from the protocol,
+    // so he can't really deal any damage to the protocol at creation time.
+    //
+    // So far a user could try to forge an Owner Lock or a Deposit (without Receipt).
+    //
+    // When the forged cell (look-alike in all except for the non-empty args) is used as input:
+    // - Look-alike Owner Lock would not match Lock Hash in iCKB SUDT args, so it's not useful in any way.
+    // - Look-alike Deposit is ignored in the iCKB calculations, so anybody can spend it in a valid iCKB transaction.
+    //
+    // All in all makes sense to validate Script args where it's already validated, not here.
 
     let ickb_code_hash: [u8; 32] = load_script()?.code_hash().as_slice().try_into().unwrap();
 
