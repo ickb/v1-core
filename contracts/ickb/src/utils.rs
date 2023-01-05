@@ -21,11 +21,19 @@ pub fn extract_token_amount(index: usize, source: Source) -> Result<u128, Error>
 pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u64, u64), Error> {
     let data = load_cell_data(index, source)?;
 
-    // From the 1th byte to the 8th is stored in little endian the amount of a single deposit.
-    let receipt_amount = u64_from(data.as_slice(), 0)?;
+    if data.len() < 8 {
+        return Err(Error::Encoding);
+    }
 
-    // From the 9th byte to the 16th is stored in little endian the count of the contiguous deposits.
-    let receipt_count = u64_from(data.as_slice(), 8)?;
+    let mut buffer = [0u8; 8];
+
+    // From the 7th byte to the 8th is stored in little endian the count of the contiguous deposits.
+    buffer[0..2].copy_from_slice(&data[6..8]); // The last six bytes of the buffer are already zero.
+    let receipt_count = u64::from_le_bytes(buffer);
+
+    // From the 1th byte to the 6th is stored in little endian the amount of a single deposit.
+    buffer[0..6].copy_from_slice(&data[0..6]); // The last two bytes of the buffer are already zero.
+    let receipt_amount = u64::from_le_bytes(buffer);
 
     Ok((receipt_amount, receipt_count))
 }
