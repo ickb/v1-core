@@ -6,11 +6,15 @@
 # docker_image = "thewawar/ckb-capsule:2022-08-01"
 
 # capsule version
-version = "0.8.0"
+version = "0.9.0"
 # path of deployment config file
 deployment = "deployment.toml"
 
 [[contracts]]
-name = "ickb"
+name = "ickb_domain_logic"
+template_type = "Rust"
+
+[[contracts]]
+name = "ickb_limit_order"
 template_type = "Rust"
 
