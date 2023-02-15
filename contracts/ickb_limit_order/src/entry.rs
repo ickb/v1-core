@@ -78,6 +78,10 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
 
     // Validate limit order fulfillment while preventing DoS and leaving enough CKB for terminal lock state rent.
     // iCKB -> CKB
+
+    let is_owner_mode =
+        || QueryIter::new(load_cell_lock_hash, Source::Input).any(|h| h == terminal_lock_hash);
+
     if is_withdrawal {
         // Terminal state.
         if out_script_hash == terminal_lock_hash && script_type == ScriptType::None {
@@ -90,6 +94,11 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
             // DoS prevention: 1000 CKB is the minimum partial fulfillment.
             && in_ckb_amount + 1000 <= out_ckb_amount
         {
+            return Ok(());
+        }
+
+        // Recovery using owner lock.
+        if out_script_hash == terminal_lock_hash && is_owner_mode() {
             return Ok(());
         }
 
@@ -113,6 +122,11 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
             // Leave enough CKB for terminal lock state rent.
             && out_ckb_amount >= 1000
         {
+            return Ok(());
+        }
+
+        // Recovery using owner lock.
+        if out_script_hash == terminal_lock_hash && is_owner_mode() {
             return Ok(());
         }
 
