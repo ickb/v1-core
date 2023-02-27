@@ -1,5 +1,5 @@
 [workspace]
-members = ["tests","contracts/ickb_domain_logic","contracts/ickb_limit_order"]
+members = ["tests","contracts/ickb_domain_logic","contracts/ickb_limit_order","contracts/ckb_utils"]
 
 [profile.release]
 overflow-checks = true

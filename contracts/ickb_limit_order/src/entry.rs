@@ -1,4 +1,5 @@
 use crate::error::Error;
+use ckb_utils::{from_hex, u128_from, u64_from};
 use core::result::Result;
 
 use ckb_std::{
@@ -173,68 +174,4 @@ pub fn extract_args_data(script: &Script) -> Result<(bool, u64, [u8; 32]), Error
     let terminal_lock_hash: [u8; 32] = args[9..].try_into().unwrap();
 
     return Ok((is_withdrawal, exchange_ratio, terminal_lock_hash));
-}
-
-fn u128_from(data: &[u8], begin: usize) -> Result<u128, Error> {
-    let end = begin + 16;
-
-    if data.len() < end {
-        return Err(Error::Encoding);
-    }
-
-    let mut buffer = [0u8; 16];
-    buffer.copy_from_slice(&data[begin..end]);
-    let number = u128::from_le_bytes(buffer);
-
-    Ok(number)
-}
-
-//The following functions are copied from ickb_domain_logic.
-//For future: understand if and how makes sense to share this as a library.
-
-fn u64_from(data: &[u8], begin: usize) -> Result<u64, Error> {
-    let end = begin + 8;
-
-    if data.len() < end {
-        return Err(Error::Encoding);
-    }
-
-    let mut buffer = [0u8; 8];
-    buffer.copy_from_slice(&data[begin..end]);
-    let number = u64::from_le_bytes(buffer);
-
-    Ok(number)
-}
-
-pub const fn from_hex(hex_string: &str) -> [u8; 32] {
-    if hex_string.len() != 2 + 2 * 32
-        || hex_string.as_bytes()[0] != ('0' as u8)
-        || hex_string.as_bytes()[1] != ('x' as u8)
-    {
-        panic!("Invalid input hexadecimal string")
-    }
-
-    let mut result = [0u8; 32];
-    let hb = hex_string.as_bytes();
-
-    let mut i = 0;
-    while i < 32 {
-        result[i] = hex_value(hb[2 * i + 2]) * 16 + hex_value(hb[2 * i + 3]);
-
-        i += 1;
-    }
-
-    return result;
-}
-
-const fn hex_value(hc: u8) -> u8 {
-    const _0: u8 = '0' as u8;
-    const _9: u8 = '9' as u8;
-    const A: u8 = 'a' as u8;
-    const F: u8 = 'f' as u8;
-    match hc {
-        _0..=_9 => hc - _0,
-        A..=F => hc - A + 10,
-        _ => panic!("Invalid input hexadecimal character"),
-    }
 }
