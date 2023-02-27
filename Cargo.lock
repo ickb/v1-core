@@ -480,6 +480,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7968c559498b68833791364e87182fdd1a3aba803e8a16c34b1aa45fc08add1c"
 
 [[package]]
+name = "ckb_utils"
+version = "1.1.0"
+dependencies = [
+ "ckb-std",
+]
+
+[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -650,6 +657,7 @@ name = "ickb_domain_logic"
 version = "1.1.0"
 dependencies = [
  "ckb-std",
+ "ckb_utils",
 ]
 
 [[package]]
@@ -657,6 +665,7 @@ name = "ickb_limit_order"
 version = "0.1.0"
 dependencies = [
  "ckb-std",
+ "ckb_utils",
 ]
 
 [[package]]

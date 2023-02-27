@@ -7,10 +7,9 @@ use ckb_std::{
     syscalls::SysError,
 };
 
-use crate::{
-    error::Error,
-    utils::{cell_data_is_8_zeroed_bytes, from_hex},
-};
+use ckb_utils::from_hex;
+
+use crate::{error::Error, utils::cell_data_is_8_zeroed_bytes};
 
 pub fn cell_type_iter(source: Source, ickb_code_hash: [u8; 32]) -> CellTypeIter {
     CellTypeIter {
