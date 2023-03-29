@@ -4,7 +4,10 @@ use core::result::Result;
 
 use ckb_std::{
     ckb_constants::Source,
-    ckb_types::{bytes::Bytes, packed::Script, prelude::*},
+    ckb_types::{
+        packed::{Byte32, Bytes, Script, ScriptBuilder},
+        prelude::*,
+    },
     high_level::*,
 };
 
@@ -47,13 +50,15 @@ pub fn main() -> Result<(), Error> {
 
 fn validate(index: usize, script: &Script) -> Result<(), Error> {
     // Validate input.
-    let in_script_hash = load_cell_lock_hash(index, Source::Input)?;
+    let in_script = load_cell_lock(index, Source::Input)?;
     let (in_ckb_amount, in_ickb_amount, _, _) = extract_amounts(index, Source::Input)?;
-    let (is_withdrawal, exchange_ratio, terminal_lock_hash) = extract_args_data(&script)?;
+    let (is_withdrawal, exchange_ratio, terminal_lock) = extract_args_data(&script)?;
 
     // Validate output.
-    let out_script_hash = load_cell_lock_hash(index, Source::Output)?;
-    if out_script_hash != in_script_hash && out_script_hash != terminal_lock_hash {
+    let out_script = load_cell_lock(index, Source::Output)?;
+    if out_script.as_slice() != in_script.as_slice()
+        && out_script.as_slice() != terminal_lock.as_slice()
+    {
         return Err(Error::Encoding);
     }
 
@@ -80,17 +85,19 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
     // Validate limit order fulfillment while preventing DoS and leaving enough CKB for terminal lock state rent.
     // iCKB -> CKB
 
-    let is_owner_mode =
-        || QueryIter::new(load_cell_lock_hash, Source::Input).any(|h| h == terminal_lock_hash);
+    let is_owner_mode = || {
+        QueryIter::new(load_cell_lock, Source::Input)
+            .any(|s| s.as_slice() == terminal_lock.as_slice())
+    };
 
     if is_withdrawal {
         // Terminal state.
-        if out_script_hash == terminal_lock_hash && script_type == ScriptType::None {
+        if out_script.as_slice() == terminal_lock.as_slice() && script_type == ScriptType::None {
             return Ok(());
         }
 
         // Partially fulfilled.
-        if out_script_hash == in_script_hash
+        if out_script.as_slice() == in_script.as_slice()
             && script_type == ScriptType::ICKB
             // DoS prevention: 1000 CKB is the minimum partial fulfillment.
             && in_ckb_amount + 1000 <= out_ckb_amount
@@ -99,7 +106,7 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
         }
 
         // Recovery using owner lock.
-        if out_script_hash == terminal_lock_hash && is_owner_mode() {
+        if out_script.as_slice() == terminal_lock.as_slice() && is_owner_mode() {
             return Ok(());
         }
 
@@ -107,7 +114,7 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
     } else {
         // CKB -> iCKB
         // Terminal state.
-        if out_script_hash == terminal_lock_hash
+        if out_script.as_slice() == terminal_lock.as_slice()
             && script_type == ScriptType::ICKB
             && load_cell_capacity(index, Source::Output)
                 == load_cell_occupied_capacity(index, Source::Output)
@@ -116,18 +123,16 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
         }
 
         // Partially fulfilled.
-        if out_script_hash == in_script_hash
+        if out_script.as_slice() == in_script.as_slice()
             && script_type == ScriptType::ICKB
             // DOS prevention: 1000 iCKB is the minimum partial fulfillment.
             && in_ickb_amount + 1000 <= out_ickb_amount
-            // Leave enough CKB for terminal lock state rent.
-            && out_ckb_amount >= 1000
         {
             return Ok(());
         }
 
         // Recovery using owner lock.
-        if out_script_hash == terminal_lock_hash && is_owner_mode() {
+        if out_script.as_slice() == terminal_lock.as_slice() && is_owner_mode() {
             return Ok(());
         }
 
@@ -162,16 +167,21 @@ fn extract_amounts(index: usize, source: Source) -> Result<(u64, u128, ScriptTyp
 const ICKB_TOKEN_HASH: [u8; 32] =
     from_hex("0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2a");
 
-pub fn extract_args_data(script: &Script) -> Result<(bool, u64, [u8; 32]), Error> {
-    let args: Bytes = script.args().unpack();
+pub fn extract_args_data(script: &Script) -> Result<(bool, u64, Script), Error> {
+    let args: ckb_std::ckb_types::bytes::Bytes = script.args().unpack();
 
-    if args.len() != (1 + 8 + 32) {
+    if args.len() < (1 + 8 + 32 + 1) {
         return Err(Error::Encoding);
     }
 
     let is_withdrawal = args[0] != 0;
     let exchange_ratio = u64_from(&args, 1)?;
-    let terminal_lock_hash: [u8; 32] = args[9..].try_into().unwrap();
 
-    return Ok((is_withdrawal, exchange_ratio, terminal_lock_hash));
+    let script = ScriptBuilder::default()
+        .code_hash(Byte32::new_unchecked(args[1 + 8..1 + 8 + 32].into()))
+        .hash_type(args[1 + 8 + 32].into())
+        .args(Bytes::new_unchecked(args[1 + 8 + 32 + 1..].into()))
+        .build();
+
+    Ok((is_withdrawal, exchange_ratio, script))
 }
