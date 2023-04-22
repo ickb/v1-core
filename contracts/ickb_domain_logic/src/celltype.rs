@@ -162,10 +162,26 @@ const NERVOS_DAO_HASH_TYPE: u8 = ScriptHashType::Type as u8;
 const NERVOS_DAO_ARGS_LEN: usize = 0;
 
 // From https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0025-simple-udt/0025-simple-udt.md#notes
-const TOKEN_TYPE_CODE_HASH: [u8; 32] =
-    from_hex("0x5e7a36a77e68eecc013dfa2fe6a23f3b6c344b04005808694ae6dd45eea4cfd5");
-const TOKEN_TYPE_HASH_TYPE: u8 = ScriptHashType::Type as u8;
+const TOKEN_TYPE_CODE_HASH: [u8; 32] = from_hex(if cfg!(devnet) {
+    "0xe1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419"
+} else if cfg!(testnet) {
+    "0xc5e5dcf215925f7ef4dfaf5f4b4f105bc321c02776d6e7d52a1db3fcd9d011a4"
+} else
+/*mainnet*/
+{
+    "0x5e7a36a77e68eecc013dfa2fe6a23f3b6c344b04005808694ae6dd45eea4cfd5"
+});
+
+const TOKEN_TYPE_HASH_TYPE: u8 = if cfg!(devnet) {
+    ScriptHashType::Data as u8
+} else
+/*testnet or mainnet*/
+{
+    ScriptHashType::Type as u8
+};
+
 const TOKEN_TYPE_ARGS_LEN: usize = 32;
 
+// const ICKB_SCRIPT_HASH_CODE_HASH: [u8; 32] = ... // passed as arg
 const ICKB_SCRIPT_HASH_TYPE: u8 = ScriptHashType::Data1 as u8;
 const ICKB_SCRIPT_ARGS_LEN: usize = 0;
