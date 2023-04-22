@@ -1,6 +1,7 @@
 use crate::error::Error;
 use ckb_utils::{u128_from, u64_from};
 use core::result::Result;
+use primitive_types::U256;
 
 use ckb_std::{
     ckb_constants::Source,
@@ -30,7 +31,13 @@ pub fn main() -> Result<(), Error> {
 fn validate(index: usize, script: &Script) -> Result<(), Error> {
     // Validate input.
     let in_script = load_cell_lock(index, Source::Input)?;
-    let (sudt_hash, is_sudt_to_ckb, exchange_ratio, terminal_lock) = extract_args_data(&script)?;
+    let (
+        sudt_hash,
+        is_sudt_to_ckb,
+        exchange_ratio_numerator,
+        exchange_ratio_denominator,
+        terminal_lock,
+    ) = extract_args_data(&script)?;
     let (in_ckb_amount, in_sudt_amount, _, _) = extract_amounts(index, Source::Input, sudt_hash)?;
 
     // Validate output.
@@ -52,12 +59,12 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
     };
 
     // Check that limit order does not lose value.
-    // Note on Overflow: u64 quantities represented with u128, no overflow is possible.
-    let in_value =
-        u128::from(in_ckb_amount) + in_sudt_amount * u128::from(exchange_ratio) / 10 ^ 16;
-    let out_value =
-        u128::from(out_ckb_amount) + out_sudt_amount * u128::from(exchange_ratio) / 10 ^ 16;
-    if in_value > out_value {
+    // Note on Overflow: u128 quantities represented with u256, no overflow is possible.
+    if U256::from(in_ckb_amount) * U256::from(exchange_ratio_denominator)
+        + U256::from(in_sudt_amount) * U256::from(exchange_ratio_numerator)
+        > U256::from(out_ckb_amount) * U256::from(exchange_ratio_denominator)
+            + U256::from(out_sudt_amount) * U256::from(exchange_ratio_numerator)
+    {
         return Err(Error::DecreasingValue);
     }
 
@@ -78,8 +85,8 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
         // Partially fulfilled.
         if out_script.as_slice() == in_script.as_slice()
             && script_type == ScriptType::SUDT
-            // DoS prevention: 1000 CKB is the minimum partial fulfillment.
-            && in_ckb_amount + 1000 <= out_ckb_amount
+            // DoS prevention: 100 CKB is the minimum partial fulfillment.
+            && in_ckb_amount + 100 <= out_ckb_amount
         {
             return Ok(());
         }
@@ -104,8 +111,11 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
         // Partially fulfilled.
         if out_script.as_slice() == in_script.as_slice()
             && script_type == ScriptType::SUDT
-            // DOS prevention: the equivalent of 1000 CKB is the minimum partial fulfillment.
-            && in_sudt_amount + 1000 * u128::from(exchange_ratio) / 10 ^ 16 <= out_sudt_amount
+            // DOS prevention: the equivalent of 100 CKB is the minimum partial fulfillment.
+            // Note on Overflow: u128 quantities represented with u256, no overflow is possible.
+            && U256::from(in_sudt_amount) * U256::from(exchange_ratio_numerator) 
+            + U256::from(100 * exchange_ratio_denominator) 
+            <= U256::from(out_sudt_amount) * U256::from(exchange_ratio_numerator)
         {
             return Ok(());
         }
@@ -146,24 +156,31 @@ fn extract_amounts(
     return Ok((ckb_amount, sudt_amount, script_type, cell_data_len));
 }
 
-pub fn extract_args_data(script: &Script) -> Result<([u8; 32], bool, u64, Script), Error> {
+pub fn extract_args_data(script: &Script) -> Result<([u8; 32], bool, u64, u64, Script), Error> {
     let args: ckb_std::ckb_types::bytes::Bytes = script.args().unpack();
 
-    if args.len() < (32 + 1 + 8 + 32 + 1) {
+    if args.len() < (32 + 1 + 8 + 8 + 32 + 1) {
         return Err(Error::Encoding);
     }
 
     let sudt_hash: [u8; 32] = args[0..32].try_into().unwrap();
     let is_sudt_to_ckb = args[32] != 0;
-    let exchange_ratio = u64_from(&args, 32 + 1)?;
+    let exchange_ratio_numerator = u64_from(&args, 32 + 1)?;
+    let exchange_ratio_denominator = u64_from(&args, 32 + 1 + 8)?;
 
     let script = ScriptBuilder::default()
         .code_hash(Byte32::new_unchecked(
-            args[32 + 1 + 8..32 + 1 + 8 + 32].into(),
+            args[32 + 1 + 8 + 8..32 + 1 + 8 + 8 + 32].into(),
         ))
-        .hash_type(args[32 + 1 + 8 + 32].into())
-        .args(Bytes::new_unchecked(args[32 + 1 + 8 + 32 + 1..].into()))
+        .hash_type(args[32 + 1 + 8 + 8 + 32].into())
+        .args(Bytes::new_unchecked(args[32 + 1 + 8 + 8 + 32 + 1..].into()))
         .build();
 
-    Ok((sudt_hash, is_sudt_to_ckb, exchange_ratio, script))
+    Ok((
+        sudt_hash,
+        is_sudt_to_ckb,
+        exchange_ratio_numerator,
+        exchange_ratio_denominator,
+        script,
+    ))
 }

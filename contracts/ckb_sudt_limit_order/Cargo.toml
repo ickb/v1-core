@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 ckb-std = "0.10.0"
 ckb_utils = { path = "../ckb_utils" }
+primitive-types = { version = "0.12.1", default-features = false }
 
 [features]
 devnet = []
