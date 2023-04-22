@@ -15,6 +15,6 @@ name = "ickb_domain_logic"
 template_type = "Rust"
 
 [[contracts]]
-name = "ickb_limit_order"
+name = "ckb_sudt_limit_order"
 template_type = "Rust"
 

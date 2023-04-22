@@ -1,9 +1,21 @@
 # iCKB v1.1 core
 
-Build contracts:
+Build contracts for devnet:
 
 ``` sh
-capsule build
+capsule build --release -- --features devnet
+```
+
+Build contracts for testnet:
+
+``` sh
+capsule build --release -- --features testnet
+```
+
+Build contracts for mainnet:
+
+``` sh
+capsule build --release -- --features mainnet
 ```
 
 ## Licensing
