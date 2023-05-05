@@ -5,10 +5,23 @@
 #![feature(alloc_error_handler)]
 #![feature(panic_info_message)]
 
-use ckb_std::error::SysError;
 use core::result::Result;
 
+use ckb_std::ckb_types::{packed::Script, prelude::Entity};
+use ckb_std::error::SysError;
 use ckb_std::{ckb_constants::Source, high_level::*};
+
+use blake2b_ref::Blake2bBuilder;
+
+pub fn hash_script(script: &Script) -> [u8; 32] {
+    let mut output = [0u8; 32];
+    let mut blake2b = Blake2bBuilder::new(32)
+        .personal(b"ckb-default-hash")
+        .build();
+    blake2b.update(script.as_slice());
+    blake2b.finalize(&mut output);
+    output
+}
 
 pub fn extract_unused_capacity(index: usize, source: Source) -> Result<u64, SysError> {
     Ok(load_cell_capacity(index, source)? - load_cell_occupied_capacity(index, source)?)

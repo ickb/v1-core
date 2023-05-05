@@ -1,6 +1,6 @@
 use core::result::Result;
 
-use ckb_std::ckb_types::prelude::Entity;
+use ckb_std::high_level::load_script_hash;
 use ckb_std::{ckb_constants::Source, high_level::load_script};
 
 use crate::celltype::{cell_type_iter, CellType};
@@ -9,34 +9,14 @@ use crate::utils::{extract_accumulated_rate, extract_receipt_data, extract_token
 use ckb_utils::extract_unused_capacity;
 
 pub fn main() -> Result<(), Error> {
-    // This script does not use args, so they should be empty.
-    //
-    // Validating args emptiness here would mean any iCKB Lock script created
-    // with non empty arg can't be garbage collected.
-    //
-    // So let's analyze how non empty args can come to happen and what's their lifecycle.
-    //
-    // Executing iCKB Script actively invalidates transactions with malformed iCKB script in output.
-    // iCKB script with non empty args is considered malformed, so to create one the iCKB Script must
-    // not be executed, this exclude all the transactions that include:
-    // - iCKB Script used as Type Script in Receipt cells.
-    // - iCKB Script used as Lock Script in any input cell.
-    //
-    // A user can still create such a malformed cell but only in isolation from the protocol,
-    // so he can't really deal any damage to the protocol at creation time.
-    //
-    // So far a user could try to forge an Owner Lock or a Deposit (without Receipt).
-    //
-    // When the forged cell (look-alike in all except for the non-empty args) is used as input:
-    // - Look-alike Owner Lock would not match Lock Hash in iCKB SUDT args, so it's not useful in any way.
-    // - Look-alike Deposit is ignored in the iCKB calculations, so anybody can spend it in a valid iCKB transaction.
-    //
-    // All in all makes sense to validate Script args where it's already validated, not here.
+    if load_script()?.args().len() > 0 {
+        return Err(Error::ScriptArgs);
+    }
 
-    let ickb_code_hash: [u8; 32] = load_script()?.code_hash().as_slice().try_into().unwrap();
+    let ickb_script_hash: [u8; 32] = load_script_hash()?;
 
-    let out_ickb = check_output(ickb_code_hash)?;
-    let (in_ickb, in_receipts_ickb, in_deposits_ickb) = check_input(ickb_code_hash)?;
+    let out_ickb = check_output(ickb_script_hash)?;
+    let (in_ickb, in_receipts_ickb, in_deposits_ickb) = check_input(ickb_script_hash)?;
 
     // Receipts are not transferrable, only convertible.
     // Note on Overflow: u64 quantities represented with u128, no overflow is possible.
@@ -47,12 +27,12 @@ pub fn main() -> Result<(), Error> {
     }
 }
 
-fn check_input(ickb_code_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
+fn check_input(ickb_script_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
     let mut total_ickb_amount = 0;
     let mut total_receipts_ickb = 0;
     let mut total_deposits_ickb = 0;
 
-    for maybe_cell_info in cell_type_iter(Source::Output, ickb_code_hash) {
+    for maybe_cell_info in cell_type_iter(Source::Input, ickb_script_hash) {
         let (index, source, cell_type) = maybe_cell_info?;
 
         match cell_type {
@@ -105,11 +85,11 @@ fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Er
     return Ok(ickb_amount);
 }
 
-fn check_output(ickb_code_hash: [u8; 32]) -> Result<u128, Error> {
+fn check_output(ickb_script_hash: [u8; 32]) -> Result<u128, Error> {
     let mut total_ickb_amount = 0;
 
     let (mut deposit_count, mut deposit_amount) = (0u64, 0u64);
-    for maybe_cell_info in cell_type_iter(Source::Output, ickb_code_hash) {
+    for maybe_cell_info in cell_type_iter(Source::Output, ickb_script_hash) {
         let (index, source, cell_type) = maybe_cell_info?;
 
         // A deposit must be followed by another equal deposit or their exact receipt.

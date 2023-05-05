@@ -33,7 +33,7 @@ pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u64, u64), 
 }
 
 pub fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, Error> {
-    let dao_data = load_header(index, source)?.raw().dao();
+    let dao_data = load_header(index, source)?.raw().dao().unpack();
 
     let accumulated_rate = u64_from(dao_data.as_slice(), 8)?;
 
