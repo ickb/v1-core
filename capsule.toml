@@ -13,5 +13,9 @@ name = "ickb_domain_logic"
 template_type = "Rust"
 
 [[contracts]]
+name = "ickb_withdrawal_request_receipt"
+template_type = "Rust"
+
+[[contracts]]
 name = "ckb_sudt_limit_order"
 template_type = "Rust"

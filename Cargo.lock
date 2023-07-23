@@ -703,6 +703,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ickb_withdrawal_request_receipt"
+version = "1.1.0"
+dependencies = [
+ "ckb-std",
+ "ckb_utils",
+]
+
+[[package]]
 name = "includedir"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
