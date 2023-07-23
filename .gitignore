@@ -3,14 +3,13 @@ tests/*
 deployment.toml
 
 # Rust
-target/*
+target
 .cache/.cargo/*
-contracts/**/target/*
 
 # C
 contracts/c/build/*
 
 # others
 build/*
-# !.gitkeep
+!.gitkeep
 .tmp/

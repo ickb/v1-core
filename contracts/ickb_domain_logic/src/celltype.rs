@@ -110,13 +110,11 @@ impl CellTypeIter {
 }
 
 pub fn cell_type_iter(source: Source, ickb_script_hash: [u8; 32]) -> CellTypeIter {
-    // use ckb_std::ckb_types::bytes::Bytes;
-
     let ickb_sudt_script_hash = hash_script(
         &ScriptBuilder::default()
             .code_hash(Byte32::from_slice(&SUDT_CODE_HASH).unwrap())
             .hash_type(SUDT_HASH_TYPE.into())
-            .args(Bytes::from(ickb_script_hash.as_slice()).pack())
+            .args(Bytes::from(ickb_script_hash.to_vec()).pack())
             .build(),
     );
 

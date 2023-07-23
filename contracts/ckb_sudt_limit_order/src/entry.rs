@@ -170,10 +170,10 @@ pub fn extract_args_data(script: &Script) -> Result<([u8; 32], bool, u64, u64, S
 
     let script = ScriptBuilder::default()
         .code_hash(Byte32::new_unchecked(
-            args[32 + 1 + 8 + 8..32 + 1 + 8 + 8 + 32].into(),
+            args[32 + 1 + 8 + 8..32 + 1 + 8 + 8 + 32].to_vec().into(),
         ))
         .hash_type(args[32 + 1 + 8 + 8 + 32].into())
-        .args(Bytes::new_unchecked(args[32 + 1 + 8 + 8 + 32 + 1..].into()))
+        .args(Bytes::new_unchecked(args[32 + 1 + 8 + 8 + 32 + 1..].to_vec().into()))
         .build();
 
     Ok((

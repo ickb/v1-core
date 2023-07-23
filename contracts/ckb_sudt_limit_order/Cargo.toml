@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-ckb-std = "0.10.0"
+ckb-std = "0.14.1"
 ckb_utils = { path = "../ckb_utils" }
 primitive-types = { version = "0.12.1", default-features = false }
 

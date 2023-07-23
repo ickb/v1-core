@@ -51,7 +51,7 @@ pub fn cell_data_is_8_zeroed_bytes(index: usize, source: Source) -> bool {
     }
 
     match u64_from(data.as_slice(), 0) {
-        Ok(d) => (d == 0),
+        Ok(d) => d == 0,
         Err(_) => false,
     }
 }
