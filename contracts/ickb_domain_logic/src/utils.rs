@@ -21,15 +21,15 @@ pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u64, u64), 
 
     let mut buffer = [0u8; 8];
 
-    // From the 7th byte to the 8th is stored in little endian the count of the contiguous deposits.
-    buffer[0..2].copy_from_slice(&data[6..8]); // The last six bytes of the buffer are already zero.
+    // From the first byte to the second is stored in little endian the count of the contiguous deposits.
+    buffer[0..2].copy_from_slice(&data[0..2]); // The last six bytes of the buffer are already zero.
     let receipt_count = u64::from_le_bytes(buffer);
 
-    // From the 1th byte to the 6th is stored in little endian the amount of a single deposit.
-    buffer[0..6].copy_from_slice(&data[0..6]); // The last two bytes of the buffer are already zero.
+    // From the 3th byte to the 8th is stored in little endian the amount of a single deposit.
+    buffer[0..6].copy_from_slice(&data[2..8]); // The last two bytes of the buffer are already zero.
     let receipt_amount = u64::from_le_bytes(buffer);
 
-    Ok((receipt_amount, receipt_count))
+    Ok((receipt_count, receipt_amount))
 }
 
 pub fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, Error> {

@@ -44,12 +44,12 @@ fn check_input(ickb_script_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> 
                 total_deposits_ickb += deposit_to_ickb(index, source, deposit_amount)?;
             }
             CellType::Receipt => {
-                let (receipt_amount, receipt_count) = extract_receipt_data(index, source)?;
+                let (receipt_count, receipt_amount) = extract_receipt_data(index, source)?;
 
                 // Convert to iCKB and apply a 10% fee for the amount exceeding the soft iCKB cap per deposit.
                 // Note on Overflow: u64 quantities represented with u128, no overflow is possible.
                 total_receipts_ickb +=
-                    deposit_to_ickb(index, source, receipt_amount)? * u128::from(receipt_count);
+                    u128::from(receipt_count) * deposit_to_ickb(index, source, receipt_amount)?;
             }
             CellType::Token => {
                 // Note on Overflow: u64 quantities represented with u128, no overflow is possible.
@@ -114,7 +114,7 @@ fn check_output(ickb_script_hash: [u8; 32]) -> Result<u128, Error> {
                 return Err(Error::NoDeposit);
             }
             (CellType::Receipt, ..) => {
-                let (receipt_amount, receipt_count) = extract_receipt_data(index, source)?;
+                let (receipt_count, receipt_amount) = extract_receipt_data(index, source)?;
                 if (receipt_count, receipt_amount) == (deposit_count, deposit_amount) {
                     (deposit_count, deposit_amount) = (0, 0);
                 } else {

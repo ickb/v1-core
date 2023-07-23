@@ -34,8 +34,8 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
     let (
         sudt_hash,
         is_sudt_to_ckb,
-        exchange_ratio_numerator,
-        exchange_ratio_denominator,
+        sudt_multiplier,
+        ckb_multiplier,
         terminal_lock,
     ) = extract_args_data(&script)?;
     let (in_ckb_amount, in_sudt_amount, _, _) = extract_amounts(index, Source::Input, sudt_hash)?;
@@ -60,10 +60,10 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
 
     // Check that limit order does not lose value.
     // Note on Overflow: u128 quantities represented with u256, no overflow is possible.
-    if U256::from(in_ckb_amount) * U256::from(exchange_ratio_denominator)
-        + U256::from(in_sudt_amount) * U256::from(exchange_ratio_numerator)
-        > U256::from(out_ckb_amount) * U256::from(exchange_ratio_denominator)
-            + U256::from(out_sudt_amount) * U256::from(exchange_ratio_numerator)
+    if U256::from(in_ckb_amount) * U256::from(ckb_multiplier)
+        + U256::from(in_sudt_amount) * U256::from(sudt_multiplier)
+        > U256::from(out_ckb_amount) * U256::from(ckb_multiplier)
+            + U256::from(out_sudt_amount) * U256::from(sudt_multiplier)
     {
         return Err(Error::DecreasingValue);
     }
@@ -113,9 +113,9 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
             && script_type == ScriptType::SUDT
             // DOS prevention: the equivalent of 100 CKB is the minimum partial fulfillment.
             // Note on Overflow: u128 quantities represented with u256, no overflow is possible.
-            && U256::from(in_sudt_amount) * U256::from(exchange_ratio_numerator) 
-            + U256::from(100 * exchange_ratio_denominator) 
-            <= U256::from(out_sudt_amount) * U256::from(exchange_ratio_numerator)
+            && U256::from(in_sudt_amount) * U256::from(sudt_multiplier) 
+            + U256::from(100 * ckb_multiplier) 
+            <= U256::from(out_sudt_amount) * U256::from(sudt_multiplier)
         {
             return Ok(());
         }
@@ -165,8 +165,8 @@ pub fn extract_args_data(script: &Script) -> Result<([u8; 32], bool, u64, u64, S
 
     let sudt_hash: [u8; 32] = args[0..32].try_into().unwrap();
     let is_sudt_to_ckb = args[32] != 0;
-    let exchange_ratio_numerator = u64_from(&args, 32 + 1)?;
-    let exchange_ratio_denominator = u64_from(&args, 32 + 1 + 8)?;
+    let sudt_multiplier = u64_from(&args, 32 + 1)?;
+    let ckb_multiplier = u64_from(&args, 32 + 1 + 8)?;
 
     let script = ScriptBuilder::default()
         .code_hash(Byte32::new_unchecked(
@@ -179,8 +179,8 @@ pub fn extract_args_data(script: &Script) -> Result<([u8; 32], bool, u64, u64, S
     Ok((
         sudt_hash,
         is_sudt_to_ckb,
-        exchange_ratio_numerator,
-        exchange_ratio_denominator,
+        sudt_multiplier,
+        ckb_multiplier,
         script,
     ))
 }
