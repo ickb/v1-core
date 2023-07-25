@@ -1,5 +1,6 @@
 use core::result::Result;
 
+use alloc::vec::Vec;
 use ckb_std::{
     ckb_constants::Source,
     ckb_types::prelude::Unpack,
@@ -22,77 +23,101 @@ pub fn main() -> Result<(), Error> {
     validate(receipt_script_hash, Source::Input)
 }
 
+// An included cell is a cell whose lock is this script with empty args
+// A receipt is a cell whose type is this script with empty args
+//
+// For each receipt validate that:
+// - included cells equal to receipt count
+// - receipt count is bigger than zero
+// - 0-n receipt in inputs
+// - 0-1 receipt in outputs
 fn validate(receipt_script_hash: [u8; 32], source: Source) -> Result<(), Error> {
-    let mut included_cells_count = 0u64;
-    for (index, maybe_type_hash) in QueryIter::new(load_cell_type_hash, source).enumerate() {
-        // An included cell must be followed by another included cell or their receipt.
+    let load_tx_hash = if source == Source::Input {
+        |index: usize| match load_input_out_point(index, Source::Input) {
+            Ok(out_point) => Ok(out_point.tx_hash().unpack()),
+            Err(err) => Err(err),
+        }
+    } else {
+        |_: usize| {
+            Ok([
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ])
+        }
+    };
 
+    let mut tx_2_count_receipt = Vec::<([u8; 32], u64, u64)>::with_capacity(10);
+
+    for (index, maybe_type_hash) in QueryIter::new(load_cell_type_hash, source).enumerate() {
         let is_receipt = maybe_type_hash.map_or(false, |h| h == receipt_script_hash);
         let is_included_cell = load_cell_lock_hash(index, source)? == receipt_script_hash;
 
-        if is_receipt {
-            let receipt_count = extract_receipt_data(index, source)?;
-            if included_cells_count > 0
-                && receipt_count == included_cells_count
-                //Do not allow for interlocked receipts
-                && !is_included_cell
-            {
-                //Check that input outpoints are included correctly
-                validate_out_points(index, source, receipt_count)?;
-
-                included_cells_count = 0;
-                continue;
-            } else {
-                return Err(Error::Encoding);
-            }
+        if !is_included_cell || !is_receipt {
+            continue;
         }
+
+        if is_included_cell && is_receipt {
+            // A cell can't be both a receipt and an included cell
+            return Err(Error::Encoding);
+        }
+
+        let tx_hash = load_tx_hash(index)?;
+
+        let (position, count, receipt_count) =
+            match tx_2_count_receipt.binary_search_by_key(&tx_hash, |&(th, _, _)| th) {
+                Err(i) => {
+                    tx_2_count_receipt.insert(i, (tx_hash, 0, 0));
+                    (i, 0, 0)
+                }
+                Ok(i) => {
+                    let (_, count, receipt_count) = tx_2_count_receipt[i];
+                    (i, count, receipt_count)
+                }
+            };
 
         if is_included_cell {
             // Note on Overflow: even locking the total CKB supply in included cells can't overflow this counter.
-            included_cells_count += 1;
+            tx_2_count_receipt[position].1 = count + 1;
         }
 
-        if included_cells_count > 0 && !is_receipt && !is_included_cell {
-            return Err(Error::NoReceipt);
+        if is_receipt {
+            if receipt_count > 0 {
+                // Receipt already found
+                return Err(Error::DuplicateReceipt);
+            }
+
+            let new_receipt_count = extract_receipt_data(index, source)?;
+            if new_receipt_count == 0 {
+                // No included cells
+                return Err(Error::Encoding);
+            }
+
+            tx_2_count_receipt[position].2 = u64::from(new_receipt_count);
+        }
+    }
+
+    for (_, count, receipt_count) in tx_2_count_receipt {
+        if count != receipt_count {
+            // Mismatch in cell count
+            return Err(Error::CountMismatch);
         }
     }
 
     return Ok(());
 }
 
-fn validate_out_points(index: usize, source: Source, receipt_count: u64) -> Result<(), Error> {
-    if source != Source::Input {
-        return Ok(());
-    }
-
-    let receipt_out_point = load_input_out_point(index, source)?;
-    let receipt_out_point_tx_hash = receipt_out_point.tx_hash().unpack();
-    let receipt_out_point_index: usize = receipt_out_point.index().unpack();
-
-    for i in (index - receipt_count as usize)..index {
-        let out_point = load_input_out_point(i, source)?;
-        if receipt_out_point_tx_hash != out_point.tx_hash().unpack()
-            || receipt_out_point_index - (index - i) != out_point.index().unpack()
-        {
-            return Err(Error::Encoding);
-        }
-    }
-
-    Ok(())
-}
-
-fn extract_receipt_data(index: usize, source: Source) -> Result<u64, Error> {
+fn extract_receipt_data(index: usize, source: Source) -> Result<u32, Error> {
     let data = load_cell_data(index, source)?;
 
-    if data.len() < 2 {
+    if data.len() < 4 {
         return Err(Error::Encoding);
     }
 
-    let mut buffer = [0u8; 8];
+    let mut buffer = [0u8; 4];
 
-    // From the first byte to the second is stored in little endian the count of the contiguous cells.
-    buffer[0..2].copy_from_slice(&data[0..2]); // The last six bytes of the buffer are already zero.
-    let receipt_count = u64::from_le_bytes(buffer);
+    // From the first byte to the fourth is stored in little endian the count of the included cells.
+    buffer[0..4].copy_from_slice(&data[0..4]); // The last six bytes of the buffer are already zero.
+    let receipt_count = u32::from_le_bytes(buffer);
 
     Ok(receipt_count)
 }

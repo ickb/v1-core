@@ -9,7 +9,8 @@ pub enum Error {
     Encoding,
     // Add customized errors here...
     ScriptArgs,
-    NoReceipt,
+    DuplicateReceipt,
+    CountMismatch,
 }
 
 impl From<SysError> for Error {

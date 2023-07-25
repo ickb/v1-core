@@ -11,5 +11,5 @@ contracts/c/build/*
 
 # others
 build/*
-!.gitkeep
+#!.gitkeep
 .tmp/
