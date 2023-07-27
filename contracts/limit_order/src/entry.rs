@@ -1,5 +1,5 @@
 use crate::error::Error;
-use ckb_utils::{u128_from, u64_from};
+use utils::{u128_from, u64_from};
 use core::result::Result;
 use primitive_types::U256;
 

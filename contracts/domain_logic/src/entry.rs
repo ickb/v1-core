@@ -6,7 +6,7 @@ use ckb_std::{ckb_constants::Source, high_level::load_script};
 use crate::celltype::{cell_type_iter, CellType};
 use crate::error::Error;
 use crate::utils::{extract_accumulated_rate, extract_receipt_data, extract_token_amount};
-use ckb_utils::extract_unused_capacity;
+use utils::extract_unused_capacity;
 
 pub fn main() -> Result<(), Error> {
     if load_script()?.args().len() > 0 {

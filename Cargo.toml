@@ -1,5 +1,5 @@
 [workspace]
-members = ["tests","contracts/ickb_domain_logic","contracts/ickb_withdrawal_request_receipt","contracts/ckb_sudt_limit_order","contracts/ckb_utils"]
+members = ["tests","contracts/domain_logic","contracts/owner_owned","contracts/limit_order","contracts/utils"]
 exclude = ["tests"]
 
 [profile.release]

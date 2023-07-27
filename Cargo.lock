@@ -520,23 +520,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4af800ae2b6c54b70efa398dab015a09a52eeac2dd1ac3ad32c9bbe224974225"
 
 [[package]]
-name = "ckb_sudt_limit_order"
-version = "1.1.0"
-dependencies = [
- "ckb-std",
- "ckb_utils",
- "primitive-types",
-]
-
-[[package]]
-name = "ckb_utils"
-version = "1.1.0"
-dependencies = [
- "blake2b-ref 0.3.1",
- "ckb-std",
-]
-
-[[package]]
 name = "convert_case"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -593,6 +576,14 @@ dependencies = [
  "quote",
  "rustc_version",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "domain_logic"
+version = "1.1.0"
+dependencies = [
+ "ckb-std",
+ "utils",
 ]
 
 [[package]]
@@ -695,22 +686,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
-name = "ickb_domain_logic"
-version = "1.1.0"
-dependencies = [
- "ckb-std",
- "ckb_utils",
-]
-
-[[package]]
-name = "ickb_withdrawal_request_receipt"
-version = "1.1.0"
-dependencies = [
- "ckb-std",
- "ckb_utils",
-]
-
-[[package]]
 name = "includedir"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -748,6 +723,15 @@ name = "libc"
 version = "0.2.147"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4668fb0ea861c1df094127ac5f1da3409a82116a4ba74fca2e58ef927159bb3"
+
+[[package]]
+name = "limit_order"
+version = "1.1.0"
+dependencies = [
+ "ckb-std",
+ "primitive-types",
+ "utils",
+]
 
 [[package]]
 name = "linked-hash-map"
@@ -871,6 +855,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
 
 [[package]]
+name = "owner_owned"
+version = "1.1.0"
+dependencies = [
+ "ckb-std",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -964,9 +955,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.31"
+version = "1.0.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fe8a65d69dd0808184ebb5f836ab526bb259db23c657efa38711b1072ee47f0"
+checksum = "50f3b39ccfb720540debaa0164757101c08ecb8d326b15358ce76a62c7e85965"
 dependencies = [
  "proc-macro2",
 ]
@@ -1166,18 +1157,18 @@ checksum = "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918"
 
 [[package]]
 name = "serde"
-version = "1.0.174"
+version = "1.0.175"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b88756493a5bd5e5395d53baa70b194b05764ab85b59e43e4b8f4e1192fa9b1"
+checksum = "5d25439cd7397d044e2748a6fe2432b5e85db703d6d097bd014b3c0ad1ebff0b"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.174"
+version = "1.0.175"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e5c3a298c7f978e53536f95a63bdc4c4a64550582f31a0359a9afda6aede62e"
+checksum = "b23f7ade6f110613c0d63858ddb8b94c1041f550eab58a16b371bdf2c9c80ab4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1288,6 +1279,14 @@ name = "unicode-ident"
 version = "1.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "301abaae475aa91687eb82514b328ab47a211a533026cb25fc3e519b86adfc3c"
+
+[[package]]
+name = "utils"
+version = "1.1.0"
+dependencies = [
+ "blake2b-ref 0.3.1",
+ "ckb-std",
+]
 
 [[package]]
 name = "version_check"

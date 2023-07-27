@@ -1,5 +1,5 @@
 [package]
-name = "ckb_sudt_limit_order"
+name = "domain_logic"
 version = "1.1.0"
 edition = "2021"
 
@@ -7,8 +7,7 @@ edition = "2021"
 
 [dependencies]
 ckb-std = "0.14.1"
-ckb_utils = { path = "../ckb_utils" }
-primitive-types = { version = "0.12.1", default-features = false }
+utils = { path = "../utils" }
 
 [features]
 devnet = []

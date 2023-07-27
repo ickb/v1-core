@@ -1,5 +1,5 @@
 [package]
-name = "ckb_utils"
+name = "limit_order"
 version = "1.1.0"
 edition = "2021"
 
@@ -7,4 +7,10 @@ edition = "2021"
 
 [dependencies]
 ckb-std = "0.14.1"
-blake2b-ref = "0.3.1"
+utils = { path = "../utils" }
+primitive-types = { version = "0.12.1", default-features = false }
+
+[features]
+devnet = []
+testnet = []
+mainnet = []

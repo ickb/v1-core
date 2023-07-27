@@ -9,13 +9,13 @@ version = "0.10.1"
 deployment = "deployment.toml"
 
 [[contracts]]
-name = "ickb_domain_logic"
+name = "domain_logic"
 template_type = "Rust"
 
 [[contracts]]
-name = "ickb_withdrawal_request_receipt"
+name = "owner_owned"
 template_type = "Rust"
 
 [[contracts]]
-name = "ckb_sudt_limit_order"
+name = "limit_order"
 template_type = "Rust"

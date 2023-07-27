@@ -12,7 +12,7 @@ use ckb_std::{
     syscalls::SysError,
 };
 
-use ckb_utils::{from_hex, hash_script};
+use utils::{from_hex, hash_script};
 
 use crate::{error::Error, utils::cell_data_is_8_zeroed_bytes};
 
