@@ -6,7 +6,8 @@ use primitive_types::U256;
 use ckb_std::{
     ckb_constants::Source,
     ckb_types::{
-        packed::{Byte32, Bytes, Script, ScriptBuilder},
+        bytes::Bytes,
+        packed::{Byte32, Script, ScriptBuilder},
         prelude::*,
     },
     high_level::*,
@@ -157,7 +158,7 @@ fn extract_amounts(
 }
 
 pub fn extract_args_data(script: &Script) -> Result<([u8; 32], bool, u64, u64, Script), Error> {
-    let args: ckb_std::ckb_types::bytes::Bytes = script.args().unpack();
+    let args: Bytes = script.args().unpack();
 
     if args.len() < (32 + 1 + 8 + 8 + 32 + 1) {
         return Err(Error::Encoding);
@@ -173,7 +174,7 @@ pub fn extract_args_data(script: &Script) -> Result<([u8; 32], bool, u64, u64, S
             args[32 + 1 + 8 + 8..32 + 1 + 8 + 8 + 32].to_vec().into(),
         ))
         .hash_type(args[32 + 1 + 8 + 8 + 32].into())
-        .args(Bytes::new_unchecked(args[32 + 1 + 8 + 8 + 32 + 1..].to_vec().into()))
+        .args(Bytes::from(args[32 + 1 + 8 + 8 + 32 + 1..].to_vec()).pack())
         .build();
 
     Ok((
