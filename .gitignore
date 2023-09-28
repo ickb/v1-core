@@ -1,6 +1,5 @@
 migrations/*
 tests/*
-deployment.toml
 
 # Rust
 target
