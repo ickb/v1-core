@@ -142,17 +142,17 @@ const NERVOS_DAO_HASH_TYPE: u8 = ScriptHashType::Type as u8;
 const NERVOS_DAO_ARGS: [u8; 0] = [];
 
 // From https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0025-simple-udt/0025-simple-udt.md#notes
-const SUDT_CODE_HASH: [u8; 32] = from_hex(if cfg!(devnet) {
+const SUDT_CODE_HASH: [u8; 32] = from_hex(if cfg!(feature = "devnet") {
     "0xe1e354d6d643ad42724d40967e334984534e0367405c5ae42a9d7d63d77df419"
-} else if cfg!(testnet) {
+} else if cfg!(feature = "testnet") {
     "0xc5e5dcf215925f7ef4dfaf5f4b4f105bc321c02776d6e7d52a1db3fcd9d011a4"
-} else
-/*mainnet*/
-{
+} else if cfg!(feature = "mainnet") {
     "0x5e7a36a77e68eecc013dfa2fe6a23f3b6c344b04005808694ae6dd45eea4cfd5"
+} else {
+    panic!("Invalid chain");
 });
 
-const SUDT_HASH_TYPE: u8 = if cfg!(devnet) {
+const SUDT_HASH_TYPE: u8 = if cfg!(feature = "devnet") {
     ScriptHashType::Data as u8
 } else
 /*testnet or mainnet*/
