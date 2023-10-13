@@ -1,3 +1,7 @@
+utils/config.json
+utils/node_modules/*
+
+deployment.toml
 migrations/*
 tests/*
 

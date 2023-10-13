@@ -1,0 +1,24 @@
+{
+  "name": "utils",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "deploy": "ts-node src/deploy.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@ckb-lumos/hd": "^0.20.0",
+    "@ckb-lumos/rpc": "^0.20.0",
+    "lumos-utils": "https://github.com/phroi/lumos-utils#c1aba0e"
+  },
+  "//": {
+    "lumos-utils": "file:/home/user/lumos-utils"
+  },
+  "devDependencies": {
+    "@types/node": "^20.4.4",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.1.6"
+  }
+}
