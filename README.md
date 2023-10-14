@@ -1,24 +1,40 @@
-# iCKB v1.1 core
-
-Build contracts for devnet:
-
-``` sh
-capsule build --release -- --features devnet
-```
-
-Build contracts for testnet:
-
-``` sh
-capsule build --release -- --features testnet
-```
-
-Build contracts for mainnet:
-
-``` sh
-capsule build --release -- --features mainnet
-```
+# iCKB v1 core
 
 ## Setup
+
+### Deploy contracts on local devchain
+
+0. Start local devnet, refer to the [Complete Setup section](#complete-setup) for further instructions:
+
+```bash
+(trap 'kill -INT 0' SIGINT; cd ~/ckb/; ckb run --indexer & sleep 5 && ckb miner)
+```
+
+1. Download this repo in a folder of your choice:  
+
+```bash
+git clone https://github.com/ickb/v1-core.git
+```
+
+2. Enter into the repo's utils folder:
+
+```bash
+cd v1-core/utils
+```
+
+3. Install utils dependencies:
+
+```bash
+npm i
+```
+
+4. Build and deploy the release version of contracts on devnet:
+
+```bash
+npm run deploy release devnet
+```
+
+## Complete Setup
 
 ### Environment Setup
 
@@ -124,32 +140,12 @@ ckb-cli account import --privkey-path pk1
 ckb-cli account import --privkey-path pk2
 ```
 
-### Deploy contracts on local devchain
+### Run the project
 
-1. Download this repo in a folder of your choice:  
-
-```bash
-git clone https://github.com/ickb/v1-core.git
-```
-
-2. Enter into the repo:
-
-```bash
-cd v1-core
-```
-
-3. Build the release version for devnet:
-
-```bash
-capsule build --release -- --features devnet
-```
-
-4. Deploy the contracts:
-
-```bash
-capsule deploy --address ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqwgx292hnvmn68xf779vmzrshpmm6epn4c0cgwga
-```
+Please refer to the [initial Setup section](#setup).
 
 ## Licensing
 
-The license for iCKB core is the Business Source License 1.1 (`BUSL-1.1`), see the [`LICENSE`](./LICENSE.txt).
+The license for everything except iCKB core contracts is the MIT License, see the [`LICENSE`](./LICENSE).
+
+The license for iCKB core contracts is the Business Source License 1.1 (`BUSL-1.1`), see the [`LICENSE`](./contracts/LICENSE) in contracts.
