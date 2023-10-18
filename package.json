@@ -2,13 +2,20 @@
   "name": "utils",
   "version": "1.0.0",
   "description": "",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
   "scripts": {
+    "build": "tsc",
     "deploy": "ts-node src/deploy.ts"
   },
   "keywords": [],
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@ckb-lumos/base": "^0.20.0",
+    "@ckb-lumos/bi": "^0.20.0",
+    "@ckb-lumos/codec": "^0.20.0",
+    "@ckb-lumos/helpers": "^0.20.0",
     "@ckb-lumos/hd": "^0.20.0",
     "@ckb-lumos/rpc": "^0.20.0",
     "lumos-utils": "https://github.com/phroi/lumos-utils#79e7362"
