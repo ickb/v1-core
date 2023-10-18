@@ -1,5 +1,5 @@
-utils/config.json
-utils/node_modules/*
+config.json
+node_modules/*
 
 deployment.toml
 migrations/*
