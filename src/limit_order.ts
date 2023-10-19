@@ -1,4 +1,4 @@
-import { Byte32, HashType as HashTypeCodec, Script } from "@ckb-lumos/base/lib/blockchain";
+import { Byte32, HashType as HashTypeCodec } from "@ckb-lumos/base/lib/blockchain";
 import { BytesLike, PackParam, UnpackResult, createBytesCodec, createFixedBytesCodec } from "@ckb-lumos/codec";
 import { bytify, concat, hexify } from "@ckb-lumos/codec/lib/bytes";
 import { struct } from "@ckb-lumos/codec/lib/molecule";
@@ -9,44 +9,7 @@ import { Cell } from "@ckb-lumos/base";
 import { ickbSudtScript } from "./utils";
 import { defaultScript } from "lumos-utils";
 
-// Limit order rule on non decreasing value:
-// inCkb * ckbM + inIckb * ickbM <= outCkb * ckbM + outIckb * ickbM
-
-export function terminalCellOf(data: UnpackedOrder, inCkb: BI, inIckb: BI) {
-    let cell = {
-        cellOutput: {
-            capacity: "0x",
-            lock: {
-                codeHash: data.codeHash,
-                hashType: data.hashType,
-                args: data.args,
-            },
-            type: data.isSudtToCkb ? undefined : ickbSudtScript(),
-        },
-        data: data.isSudtToCkb ? "0x" : "0x00000000000000000000000000000000",
-    }
-
-    if (!data.isSudtToCkb) {
-        const outCkb = minimalCellCapacityCompatible(cell);
-        const outIckb = inCkb.mul(data.sudtMultiplier)
-            .add(inCkb.sub(outCkb).mul(data.ckbMultiplier))
-            .div(data.sudtMultiplier);
-        cell.cellOutput.capacity = outCkb.toHexString();
-        cell.data = hexify(Uint128LE.pack(outIckb))
-
-        return { cell, outCkb, outIckb }
-    } else {
-        const outCkb = inCkb.mul(data.ckbMultiplier)
-            .add(inIckb.mul(data.sudtMultiplier))
-            .div(data.ckbMultiplier);
-        const outIckb = BI.from(0);
-        cell.cellOutput.capacity = outCkb.toHexString();
-
-        return { cell, outCkb, outIckb }
-    }
-}
-
-export async function createOrderCell(data: PackableOrder, amount: BI) {
+export function create(data: PackableOrder, amount: BI) {
     let cell = {
         cellOutput: {
             capacity: "0x",
@@ -63,21 +26,74 @@ export async function createOrderCell(data: PackableOrder, amount: BI) {
     return cell;
 }
 
-export async function deleteOrderCell(orderCell: Cell) {
-    const unpacked = LimitOrderCodec.unpack(orderCell.cellOutput.lock.args);
+export function cancel(order: Cell) {
+    const unpacked = LimitOrderCodec.unpack(order.cellOutput.lock.args);
 
     return {
         cellOutput: {
-            capacity: orderCell.cellOutput.capacity,
+            capacity: order.cellOutput.capacity,
             lock: {
                 codeHash: unpacked.codeHash,
                 hashType: unpacked.hashType,
                 args: unpacked.args
             },
-            type: ickbSudtScript(),
+            type: order.cellOutput.type,
         },
-        data: orderCell.data
+        data: order.data
     };
+}
+
+// Limit order rule on non decreasing value:
+// min bOut such that aM * aIn + bM * bIn <= aM * aOut + bM * bOut
+// bOut = (aM * (aIn - aOut) + bM * bIn) / bM
+// But integer divisions truncate, so we need to round to the upper value
+// bOut = (aM * (aIn - aOut) + bM * bIn + bM - 1) / bM
+// bOut = (aM * (aIn - aOut) + bM * (bIn + 1) - 1) / bM
+function calculate(aM: BI, bM: BI, aIn: BI, bIn: BI, aOut: BI) {
+    return aM.mul(aIn.sub(aOut))
+        .add(bM.mul(bIn.add(1)).sub(1))
+        .div(bM);
+}
+
+export function fulfill(order: Cell) {
+    const data = LimitOrderCodec.unpack(order.cellOutput.lock.args);
+    const inCkb = BI.from(order.cellOutput.capacity);
+    let inIckb = BI.from(0);
+    if (order.cellOutput.type === undefined) {
+        //Do nothing
+    } else if (order.cellOutput.type === ickbSudtScript()) {
+        inIckb = Uint128LE.unpack(order.data);
+    } else {
+        throw Error("Limit order cell type not valid");
+    }
+
+    let cell = {
+        cellOutput: {
+            capacity: "0x",
+            lock: {
+                codeHash: data.codeHash,
+                hashType: data.hashType,
+                args: data.args,
+            },
+            type: data.isSudtToCkb ? undefined : ickbSudtScript(),
+        },
+        data: "0x"
+    }
+
+    // Limit order rule on non decreasing value:
+    // inCkb * ckbM + inIckb * ickbM <= outCkb * ckbM + outIckb * ickbM
+    if (data.isSudtToCkb) {
+        const outIckb = BI.from(0);
+        const outCkb = calculate(data.sudtMultiplier, data.ckbMultiplier, inIckb, inCkb, outIckb);
+        cell.cellOutput.capacity = outCkb.toHexString();
+    } else {
+        const outCkb = minimalCellCapacityCompatible(cell);
+        const outIckb = calculate(data.ckbMultiplier, data.sudtMultiplier, inCkb, inIckb, outCkb);
+        cell.cellOutput.capacity = outCkb.toHexString();
+        cell.data = hexify(Uint128LE.pack(outIckb));
+    }
+
+    return cell;
 }
 
 // Limit Order codec, hacked together based on @homura's LimitOrderCodec implementation:

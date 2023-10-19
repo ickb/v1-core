@@ -1,35 +1,19 @@
 import { BytesLike, PackParam, UnpackResult } from "@ckb-lumos/codec";
 import { BI } from "@ckb-lumos/bi";
 import { Cell } from "@ckb-lumos/base";
-export declare function terminalCellOf(data: UnpackedOrder, inCkb: BI, inIckb: BI): {
-    cell: {
-        cellOutput: {
-            capacity: string;
-            lock: {
-                codeHash: string;
-                hashType: import("@ckb-lumos/base").HashType;
-                args: string;
-            };
-            type: import("@ckb-lumos/base").Script | undefined;
+export declare function create(data: PackableOrder, amount: BI): {
+    cellOutput: {
+        capacity: string;
+        lock: {
+            args: string;
+            codeHash: string;
+            hashType: import("@ckb-lumos/base").HashType;
         };
-        data: string;
+        type: import("@ckb-lumos/base").Script;
     };
-    outCkb: BI;
-    outIckb: BI;
+    data: string;
 };
-export declare function createOrderCell(data: PackableOrder, amount: BI): Promise<{
-    cellOutput: {
-        capacity: string;
-        lock: {
-            args: string;
-            codeHash: string;
-            hashType: import("@ckb-lumos/base").HashType;
-        };
-        type: import("@ckb-lumos/base").Script;
-    };
-    data: string;
-}>;
-export declare function deleteOrderCell(orderCell: Cell): Promise<{
+export declare function cancel(order: Cell): {
     cellOutput: {
         capacity: string;
         lock: {
@@ -37,10 +21,22 @@ export declare function deleteOrderCell(orderCell: Cell): Promise<{
             hashType: import("@ckb-lumos/base").HashType;
             args: string;
         };
-        type: import("@ckb-lumos/base").Script;
+        type: import("@ckb-lumos/base").Script | undefined;
     };
     data: string;
-}>;
+};
+export declare function fulfill(order: Cell): {
+    cellOutput: {
+        capacity: string;
+        lock: {
+            codeHash: string;
+            hashType: import("@ckb-lumos/base").HashType;
+            args: string;
+        };
+        type: import("@ckb-lumos/base").Script | undefined;
+    };
+    data: string;
+};
 export declare const BooleanCodec: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<boolean, boolean>;
 export declare const PartialLimitOrderCodec: import("@ckb-lumos/codec/lib/molecule/layout").ObjectCodec<{
     sudtHash: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<string, BytesLike>;

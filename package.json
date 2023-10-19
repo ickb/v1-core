@@ -18,7 +18,7 @@
     "@ckb-lumos/helpers": "^0.20.0",
     "@ckb-lumos/hd": "^0.20.0",
     "@ckb-lumos/rpc": "^0.20.0",
-    "lumos-utils": "https://github.com/phroi/lumos-utils#79e7362"
+    "lumos-utils": "https://github.com/phroi/lumos-utils#291b0ae"
   },
   "//": {
     "lumos-utils": "file:/home/user/lumos-utils"
