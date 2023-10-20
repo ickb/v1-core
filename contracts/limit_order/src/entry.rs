@@ -29,6 +29,8 @@ pub fn main() -> Result<(), Error> {
     Ok(())
 }
 
+const CKB_DECIMALS: u64 = 8;
+
 fn validate(index: usize, script: &Script) -> Result<(), Error> {
     // Validate input.
     let in_script = load_cell_lock(index, Source::Input)?;
@@ -70,6 +72,7 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
             .any(|s| s.as_slice() == terminal_lock.as_slice())
     };
 
+    let one_hundred_ckb = U256::from(100 * 10 ^ CKB_DECIMALS); // 100 CKB
     if is_sudt_to_ckb {
         // Terminal state.
         if out_script.as_slice() == terminal_lock.as_slice() && script_type == ScriptType::None {
@@ -80,7 +83,7 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
         if out_script.as_slice() == in_script.as_slice()
             && script_type == ScriptType::SUDT
             // DoS prevention: 100 CKB is the minimum partial fulfillment.
-            && in_ckb_amount + U256::from(100) <= out_ckb_amount
+            && in_ckb_amount + one_hundred_ckb  <= out_ckb_amount
         {
             return Ok(());
         }
@@ -107,7 +110,7 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
             && script_type == ScriptType::SUDT
             // DOS prevention: the equivalent of 100 CKB is the minimum partial fulfillment.
             // Note on Overflow: u128 quantities represented with u256, no overflow is possible.
-            && in_sudt_amount * sudt_multiplier + U256::from(100) * ckb_multiplier
+            && in_sudt_amount * sudt_multiplier + one_hundred_ckb * ckb_multiplier
                 <= out_sudt_amount * sudt_multiplier
         {
             return Ok(());
