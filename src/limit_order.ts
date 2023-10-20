@@ -3,11 +3,37 @@ import { BytesLike, PackParam, UnpackResult, createBytesCodec, createFixedBytesC
 import { bytify, concat, hexify } from "@ckb-lumos/codec/lib/bytes";
 import { struct } from "@ckb-lumos/codec/lib/molecule";
 import { Uint128LE, Uint64LE } from "@ckb-lumos/codec/lib/number";
-import { BI } from "@ckb-lumos/bi";
+import { BI, BIish } from "@ckb-lumos/bi";
 import { minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
 import { Cell } from "@ckb-lumos/base";
 import { ickbSudtScript } from "./utils";
 import { defaultScript } from "lumos-utils";
+import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
+
+// Limit order rule on non decreasing value:
+// min bOut such that aM * aIn + bM * bIn <= aM * aOut + bM * bOut
+// bOut = (aM * (aIn - aOut) + bM * bIn) / bM
+// But integer divisions truncate, so we need to round to the upper value
+// bOut = (aM * (aIn - aOut) + bM * bIn + bM - 1) / bM
+// bOut = (aM * (aIn - aOut) + bM * (bIn + 1) - 1) / bM
+function calculate(aM: BI, bM: BI, aIn: BI, bIn: BI, aOut: BI) {
+    return aM.mul(aIn.sub(aOut))
+        .add(bM.mul(bIn.add(1)).sub(1))
+        .div(bM);
+}
+
+export function isValid(order: Cell) {
+    const unpacked = LimitOrderCodec.unpack(order.cellOutput.lock.args);
+
+    const type = order.cellOutput.type;
+    if (type !== undefined && unpacked.sudtHash !== computeScriptHash(type)) {
+        return false;
+    }
+
+    //TODO add other checks, if any
+
+    return true;
+}
 
 export function create(data: PackableOrder, amount: BI) {
     let cell = {
@@ -43,17 +69,7 @@ export function cancel(order: Cell) {
     };
 }
 
-// Limit order rule on non decreasing value:
-// min bOut such that aM * aIn + bM * bIn <= aM * aOut + bM * bOut
-// bOut = (aM * (aIn - aOut) + bM * bIn) / bM
-// But integer divisions truncate, so we need to round to the upper value
-// bOut = (aM * (aIn - aOut) + bM * bIn + bM - 1) / bM
-// bOut = (aM * (aIn - aOut) + bM * (bIn + 1) - 1) / bM
-function calculate(aM: BI, bM: BI, aIn: BI, bIn: BI, aOut: BI) {
-    return aM.mul(aIn.sub(aOut))
-        .add(bM.mul(bIn.add(1)).sub(1))
-        .div(bM);
-}
+
 
 export function fulfill(order: Cell) {
     const data = LimitOrderCodec.unpack(order.cellOutput.lock.args);
@@ -107,12 +123,20 @@ export const BooleanCodec = createFixedBytesCodec<boolean>(
     },
 );
 
+export const PositiveUint64LE = createFixedBytesCodec<BI, BIish>(
+    {
+        byteLength: Uint64LE.byteLength,
+        pack: (packable) => Uint64LE.pack(BI.from(-1).add(packable)),
+        unpack: (unpackable) => Uint64LE.unpack(unpackable).add(1),
+    },
+);
+
 export const PartialLimitOrderCodec = struct(
     {
         sudtHash: Byte32,
         isSudtToCkb: BooleanCodec,
-        sudtMultiplier: Uint64LE,
-        ckbMultiplier: Uint64LE,
+        sudtMultiplier: PositiveUint64LE,
+        ckbMultiplier: PositiveUint64LE,
         codeHash: Byte32,
         hashType: HashTypeCodec,
     },

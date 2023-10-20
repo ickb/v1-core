@@ -1,6 +1,7 @@
 import { BytesLike, PackParam, UnpackResult } from "@ckb-lumos/codec";
-import { BI } from "@ckb-lumos/bi";
+import { BI, BIish } from "@ckb-lumos/bi";
 import { Cell } from "@ckb-lumos/base";
+export declare function isValid(order: Cell): boolean;
 export declare function create(data: PackableOrder, amount: BI): {
     cellOutput: {
         capacity: string;
@@ -38,11 +39,12 @@ export declare function fulfill(order: Cell): {
     data: string;
 };
 export declare const BooleanCodec: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<boolean, boolean>;
+export declare const PositiveUint64LE: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<BI, BIish>;
 export declare const PartialLimitOrderCodec: import("@ckb-lumos/codec/lib/molecule/layout").ObjectCodec<{
     sudtHash: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<string, BytesLike>;
     isSudtToCkb: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<boolean, boolean>;
-    sudtMultiplier: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<BI, import("@ckb-lumos/bi").BIish>;
-    ckbMultiplier: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<BI, import("@ckb-lumos/bi").BIish>;
+    sudtMultiplier: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<BI, BIish>;
+    ckbMultiplier: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<BI, BIish>;
     codeHash: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<string, BytesLike>;
     hashType: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<import("@ckb-lumos/base").HashType, import("@ckb-lumos/base").HashType>;
 }> & import("@ckb-lumos/codec/lib/base").Fixed;
