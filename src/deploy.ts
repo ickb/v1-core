@@ -50,7 +50,7 @@ async function main() {
 }
 
 async function ickbScriptData(buildType: BuildType, chain: Chain) {
-    execSync(`cd .. && capsule build ${buildType2Flag[buildType]} -- --features ${chain};`);
+    execSync(`capsule build ${buildType2Flag[buildType]} -- --features ${chain};`);
     console.log();
     const result: ScriptData[] = [];
     for (const name of (await readdir(folderPath))) {
@@ -65,7 +65,7 @@ async function ickbScriptData(buildType: BuildType, chain: Chain) {
     return result;
 }
 
-const folderPath = "../build/release/";
+const folderPath = "build/release/";
 const buildType2Flag = {
     release: "--release",
     debug: "--debug-output --release"
