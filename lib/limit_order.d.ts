@@ -1,42 +1,31 @@
 import { BytesLike, PackParam, UnpackResult } from "@ckb-lumos/codec";
 import { BI, BIish } from "@ckb-lumos/bi";
-import { Cell } from "@ckb-lumos/base";
-export declare function isValid(order: Cell): boolean;
-export declare function create(data: PackableOrder, amount: BI): {
-    cellOutput: {
-        capacity: string;
-        lock: {
-            args: string;
-            codeHash: string;
-            hashType: import("@ckb-lumos/base").HashType;
+import { Cell, Script } from "@ckb-lumos/base";
+export declare function newLimitOrderUtils(sudtType?: Script): {
+    create: (data: PackableOrder & {
+        ckbAmount?: BI;
+        sudtAmount?: BI;
+    }) => {
+        cellOutput: {
+            capacity: string;
+            lock: {
+                args: string;
+                codeHash: string;
+                hashType: import("@ckb-lumos/base").HashType;
+            };
+            type: Script;
         };
-        type: import("@ckb-lumos/base").Script;
+        data: string;
     };
-    data: string;
-};
-export declare function cancel(order: Cell): {
-    cellOutput: {
-        capacity: string;
-        lock: {
-            codeHash: string;
-            hashType: import("@ckb-lumos/base").HashType;
-            args: string;
+    fulfill: (order: Cell, ckbAllowance: BI | undefined, sudtAllowance: BI | undefined) => Cell;
+    cancel: (order: Cell) => {
+        cellOutput: {
+            capacity: string;
+            lock: Script;
+            type: Script | undefined;
         };
-        type: import("@ckb-lumos/base").Script | undefined;
+        data: string;
     };
-    data: string;
-};
-export declare function fulfill(order: Cell): {
-    cellOutput: {
-        capacity: string;
-        lock: {
-            codeHash: string;
-            hashType: import("@ckb-lumos/base").HashType;
-            args: string;
-        };
-        type: import("@ckb-lumos/base").Script | undefined;
-    };
-    data: string;
 };
 export declare const BooleanCodec: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<boolean, boolean>;
 export declare const PositiveUint64LE: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<BI, BIish>;
