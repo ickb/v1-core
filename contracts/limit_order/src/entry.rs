@@ -34,7 +34,7 @@ const CKB_DECIMALS: u64 = 8;
 fn validate(index: usize, script: &Script) -> Result<(), Error> {
     // Validate input.
     let in_script = load_cell_lock(index, Source::Input)?;
-    let (sudt_hash, is_sudt_to_ckb, sudt_multiplier, ckb_multiplier, terminal_lock) =
+    let (terminal_lock, sudt_hash, is_sudt_to_ckb, ckb_multiplier, sudt_multiplier) =
         extract_args_data(&script)?;
     let (in_ckb_amount, in_sudt_amount, _, _) = extract_amounts(index, Source::Input, sudt_hash)?;
 
@@ -152,34 +152,54 @@ fn extract_amounts(
     return Ok((ckb_amount, sudt_amount, script_type, cell_data_len));
 }
 
-pub fn extract_args_data(script: &Script) -> Result<([u8; 32], bool, U256, U256, Script), Error> {
+#[repr(usize)]
+enum Role {
+    TerminalLockCodeHash = 0,
+    TerminalLockHashType,
+    TerminalLockArgs,
+    SudtHash,
+    IsSudtToCkb,
+    CkbMultiplier,
+    SudtMultiplier,
+}
+pub fn extract_args_data(script: &Script) -> Result<(Script, [u8; 32], bool, U256, U256), Error> {
     let args: Bytes = script.args().unpack();
-
-    if args.len() < (32 + 1 + 8 + 8 + 32 + 1) {
+    let mut lengths: [usize; 7] = [32, 1, 0, 32, 1, 32, 32];
+    let minimum_length: usize = lengths.iter().sum();
+    if args.len() < minimum_length {
         return Err(Error::Encoding);
     }
+    lengths[Role::TerminalLockArgs as usize] = args.len() - minimum_length;
 
-    let sudt_hash: [u8; 32] = args[0..32].try_into().unwrap();
-    let is_sudt_to_ckb = args[32] != 0;
+    let mut data: [&[u8]; 7] = Default::default();
+    let mut x0: usize = 0;
+    for (index, length) in lengths.iter().enumerate() {
+        let x1 = x0 + length;
+        data[index] = &args[x0..x1];
+        x0 = x1;
+    }
+
+    let terminal_lock = ScriptBuilder::default()
+        .code_hash(Byte32::new_unchecked(
+            data[Role::TerminalLockCodeHash as usize].to_vec().into(),
+        ))
+        .hash_type(data[Role::TerminalLockHashType as usize][0].into())
+        .args(Bytes::from(data[Role::TerminalLockArgs as usize].to_vec()).pack())
+        .build();
+
+    let sudt_hash: [u8; 32] = data[Role::SudtHash as usize].try_into().unwrap();
+    let is_sudt_to_ckb = data[Role::IsSudtToCkb as usize][0] != 0;
 
     // Multipliers are only positive numbers, so they are encoded subtracting 1 to avoid the zero value.
     // Note on Overflow: u64 quantities represented with u256, no overflow is possible.
-    let sudt_multiplier = U256::from(u64_from(&args, 32 + 1)?) + 1;
-    let ckb_multiplier = U256::from(u64_from(&args, 32 + 1 + 8)?) + 1;
-
-    let script = ScriptBuilder::default()
-        .code_hash(Byte32::new_unchecked(
-            args[32 + 1 + 8 + 8..32 + 1 + 8 + 8 + 32].to_vec().into(),
-        ))
-        .hash_type(args[32 + 1 + 8 + 8 + 32].into())
-        .args(Bytes::from(args[32 + 1 + 8 + 8 + 32 + 1..].to_vec()).pack())
-        .build();
+    let ckb_multiplier = U256::from(u64_from(data[Role::CkbMultiplier as usize], 32 + 1 + 8)?) + 1;
+    let sudt_multiplier = U256::from(u64_from(data[Role::SudtMultiplier as usize], 32 + 1)?) + 1;
 
     Ok((
+        terminal_lock,
         sudt_hash,
         is_sudt_to_ckb,
-        sudt_multiplier,
         ckb_multiplier,
-        script,
+        sudt_multiplier,
     ))
 }

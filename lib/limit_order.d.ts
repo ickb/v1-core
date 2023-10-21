@@ -1,6 +1,5 @@
-import { BytesLike, PackParam, UnpackResult } from "@ckb-lumos/codec";
-import { BI, BIish } from "@ckb-lumos/bi";
-import { Cell, Script } from "@ckb-lumos/base";
+import { BI } from "@ckb-lumos/bi";
+import { Cell, HashType, HexString, Script } from "@ckb-lumos/base";
 export declare function newLimitOrderUtils(sudtType?: Script): {
     create: (data: PackableOrder & {
         ckbAmount?: BI;
@@ -11,7 +10,7 @@ export declare function newLimitOrderUtils(sudtType?: Script): {
             lock: {
                 args: string;
                 codeHash: string;
-                hashType: import("@ckb-lumos/base").HashType;
+                hashType: HashType;
             };
             type: Script;
         };
@@ -21,28 +20,39 @@ export declare function newLimitOrderUtils(sudtType?: Script): {
     cancel: (order: Cell) => {
         cellOutput: {
             capacity: string;
-            lock: Script;
+            lock: {
+                codeHash: string;
+                hashType: HashType;
+                args: string;
+            };
             type: Script | undefined;
         };
         data: string;
     };
+    extract: (order: Cell) => {
+        ckbAmount: BI;
+        sudtAmount: BI;
+        terminalLock: {
+            codeHash: string;
+            hashType: HashType;
+            args: string;
+        };
+        sudtHash: string;
+        isSudtToCkb: boolean;
+        ckbMultiplier: BI;
+        sudtMultiplier: BI;
+    };
 };
-export declare const BooleanCodec: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<boolean, boolean>;
-export declare const PositiveUint64LE: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<BI, BIish>;
-export declare const PartialLimitOrderCodec: import("@ckb-lumos/codec/lib/molecule/layout").ObjectCodec<{
-    sudtHash: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<string, BytesLike>;
-    isSudtToCkb: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<boolean, boolean>;
-    sudtMultiplier: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<BI, BIish>;
-    ckbMultiplier: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<BI, BIish>;
-    codeHash: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<string, BytesLike>;
-    hashType: import("@ckb-lumos/codec/lib/base").FixedBytesCodec<import("@ckb-lumos/base").HashType, import("@ckb-lumos/base").HashType>;
-}> & import("@ckb-lumos/codec/lib/base").Fixed;
-export declare const ArgsLimitOrderCodec: import("@ckb-lumos/codec/lib/base").BytesCodec<{
-    args: string;
-}, {
-    args: BytesLike;
-}>;
-export type PackableOrder = PackParam<typeof PartialLimitOrderCodec> & PackParam<typeof ArgsLimitOrderCodec>;
-export type UnpackedOrder = UnpackResult<typeof PartialLimitOrderCodec> & UnpackResult<typeof ArgsLimitOrderCodec>;
-export declare const LimitOrderCodec: import("@ckb-lumos/codec/lib/base").BytesCodec<UnpackedOrder, PackableOrder>;
+export type PackableOrder = {
+    terminalLock: {
+        codeHash: HexString;
+        hashType: HashType;
+        args: HexString;
+    };
+    sudtHash: HexString;
+    isSudtToCkb: boolean;
+    ckbMultiplier: BI;
+    sudtMultiplier: BI;
+};
+export declare const LimitOrderCodec: import("@ckb-lumos/codec/lib/base").BytesCodec<PackableOrder, PackableOrder>;
 //# sourceMappingURL=limit_order.d.ts.map

@@ -1,11 +1,11 @@
-import { Byte32, HashType as HashTypeCodec } from "@ckb-lumos/base/lib/blockchain";
-import { BytesLike, PackParam, UnpackResult, createBytesCodec, createFixedBytesCodec } from "@ckb-lumos/codec";
-import { bytify, concat, hexify } from "@ckb-lumos/codec/lib/bytes";
+import { Byte32, HashType as HashTypeCodec, createFixedHexBytesCodec } from "@ckb-lumos/base/lib/blockchain";
+import { createBytesCodec, createFixedBytesCodec } from "@ckb-lumos/codec";
+import { hexify } from "@ckb-lumos/codec/lib/bytes";
 import { struct } from "@ckb-lumos/codec/lib/molecule";
 import { Uint128LE, Uint64LE } from "@ckb-lumos/codec/lib/number";
 import { BI, BIish, parseUnit } from "@ckb-lumos/bi";
 import { minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
-import { Cell, Script } from "@ckb-lumos/base";
+import { Cell, HashType, HexString, Script } from "@ckb-lumos/base";
 import { defaultScript, scriptEq } from "lumos-utils";
 import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
 import { ickbSudtScript } from "./domain_logic";
@@ -107,16 +107,10 @@ export function newLimitOrderUtils(sudtType: Script = ickbSudtScript()) {
             sudtAmount = Uint128LE.unpack(order.data);
         }
 
-        const terminalLock: Script = {
-            codeHash: data.codeHash,
-            hashType: data.hashType,
-            args: data.args
-        }
-
-        return { ...data, ckbAmount, sudtAmount, terminalLock }
+        return { ...data, ckbAmount, sudtAmount }
     }
 
-    return { create, fulfill, cancel }
+    return { create, fulfill, cancel, extract }
 }
 
 // Limit order rule on non decreasing value:
@@ -131,10 +125,7 @@ function calculate(aM: BI, bM: BI, aIn: BI, bIn: BI, aOut: BI) {
         .div(bM);
 }
 
-// Limit Order codec, hacked together based on @homura's LimitOrderCodec implementation:
-// https://github.com/ckb-js/lumos/issues/539#issuecomment-1646452128
-
-export const BooleanCodec = createFixedBytesCodec<boolean>(
+const BooleanCodec = createFixedBytesCodec<boolean>(
     {
         byteLength: 1,
         pack: (packable) => new Uint8Array([packable ? 1 : 0]),
@@ -142,7 +133,7 @@ export const BooleanCodec = createFixedBytesCodec<boolean>(
     },
 );
 
-export const PositiveUint64LE = createFixedBytesCodec<BI, BIish>(
+const PositiveUint64LE = createFixedBytesCodec<BI, BIish>(
     {
         byteLength: Uint64LE.byteLength,
         pack: (packable) => Uint64LE.pack(BI.from(-1).add(packable)),
@@ -150,37 +141,45 @@ export const PositiveUint64LE = createFixedBytesCodec<BI, BIish>(
     },
 );
 
-export const PartialLimitOrderCodec = struct(
-    {
-        sudtHash: Byte32,
-        isSudtToCkb: BooleanCodec,
-        sudtMultiplier: PositiveUint64LE,
-        ckbMultiplier: PositiveUint64LE,
-        codeHash: Byte32,
-        hashType: HashTypeCodec,
-    },
-    ["sudtHash", "isSudtToCkb", "sudtMultiplier", "ckbMultiplier", "codeHash", "hashType"]
-);
+export type PackableOrder = {
+    terminalLock: {
+        codeHash: HexString, // 32 bytes
+        hashType: HashType,  // 1 byte
+        args: HexString      // ?? bytes
+    }
+    sudtHash: HexString,     // 32 bytes
+    isSudtToCkb: boolean,    // 1 byte
+    ckbMultiplier: BI,       // 32 bytes
+    sudtMultiplier: BI,      // 32 bytes
+}
 
-export const ArgsLimitOrderCodec = createBytesCodec<{ args: string }, { args: BytesLike }>({
-    pack: (unpacked) => bytify(unpacked.args),
-    unpack: (packed) => ({ args: hexify(packed) }),
-});
+const newParametricLimitOrderCodec = (argsLength: number) => {
+    const ParametricScriptCodec = struct(
+        {
+            codeHash: Byte32,
+            hashType: HashTypeCodec,
+            args: createFixedHexBytesCodec(argsLength),
+        },
+        ["codeHash", "hashType", "args"]
+    );
 
-export type PackableOrder = PackParam<typeof PartialLimitOrderCodec> & PackParam<typeof ArgsLimitOrderCodec>;
-export type UnpackedOrder = UnpackResult<typeof PartialLimitOrderCodec> & UnpackResult<typeof ArgsLimitOrderCodec>;
+    return struct(
+        {
+            terminalLock: ParametricScriptCodec,
+            sudtHash: Byte32,
+            isSudtToCkb: BooleanCodec,
+            ckbMultiplier: PositiveUint64LE,
+            sudtMultiplier: PositiveUint64LE,
+        },
+        ["terminalLock", "sudtHash", "isSudtToCkb", "ckbMultiplier", "sudtMultiplier"]
+    );
+}
 
-export const LimitOrderCodec = createBytesCodec<UnpackedOrder, PackableOrder>({
-    pack: (unpacked) => {
-        return concat(PartialLimitOrderCodec.pack(unpacked), ArgsLimitOrderCodec.pack(unpacked));
-    },
-    unpack: (packed): UnpackedOrder => {
-        const packedConfig = packed.slice(0, PartialLimitOrderCodec.byteLength)
-        const packedArgs = packed.slice(PartialLimitOrderCodec.byteLength)
+const minLimitOrderLength = newParametricLimitOrderCodec(0).byteLength;
 
-        const config = PartialLimitOrderCodec.unpack(packedConfig);
-        const args = ArgsLimitOrderCodec.unpack(packedArgs);
-
-        return { ...config, ...args };
-    },
+export const LimitOrderCodec = createBytesCodec<PackableOrder>({
+    pack: (packable) =>
+        newParametricLimitOrderCodec((packable.terminalLock.args.length - 2) / 2).pack(packable),
+    unpack: (packed) =>
+        newParametricLimitOrderCodec(packed.length - minLimitOrderLength).unpack(packed),
 });
