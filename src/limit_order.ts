@@ -10,14 +10,14 @@ import { defaultScript, scriptEq } from "lumos-utils";
 import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
 import { ickbSudtScript } from "./domain_logic";
 
-export function newLimitOrderUtils(sudtType: Script = ickbSudtScript()) {
+export function newLimitOrderUtils(limitOrderLock: Script = defaultScript("LIMIT_ORDER"), sudtType: Script = ickbSudtScript()) {
     const sudtHash = computeScriptHash(sudtType);
 
     function create(data: PackableOrder & { ckbAmount?: BI, sudtAmount?: BI }) {
         let cell = {
             cellOutput: {
                 capacity: "0x42",
-                lock: { ...defaultScript("LIMIT_ORDER"), args: hexify(LimitOrderCodec.pack(data)) },
+                lock: { ...limitOrderLock, args: hexify(LimitOrderCodec.pack(data)) },
                 type: sudtType,
             },
             data: hexify(Uint128LE.pack((data.sudtAmount || 0)))
@@ -93,15 +93,20 @@ export function newLimitOrderUtils(sudtType: Script = ickbSudtScript()) {
     }
 
     function extract(order: Cell) {
-        const data = LimitOrderCodec.unpack(order.cellOutput.lock.args);
+        const { lock, type, capacity } = order.cellOutput;
+
+        //Validate limit order lock
+        if (!scriptEq(lock, { ...limitOrderLock, args: lock.args })) {
+            throw Error("Not a limit order");
+        }
+        const data = LimitOrderCodec.unpack(lock.args);
 
         //Validate sudt type
-        const type = order.cellOutput.type;
         if ((type && !scriptEq(type, sudtType)) || data.sudtHash !== sudtHash) {
             throw Error("Invalid limit order type");
         }
 
-        const ckbAmount = BI.from(order.cellOutput.capacity);
+        const ckbAmount = BI.from(capacity);
         let sudtAmount = BI.from(0);
         if (type) {
             sudtAmount = Uint128LE.unpack(order.data);
@@ -110,7 +115,12 @@ export function newLimitOrderUtils(sudtType: Script = ickbSudtScript()) {
         return { ...data, ckbAmount, sudtAmount }
     }
 
-    return { create, fulfill, cancel, extract }
+    return {
+        create, fulfill, cancel, extract,
+        limitOrderLock: { ...limitOrderLock },
+        sudtType: { ...sudtType },
+        sudtHash
+    }
 }
 
 // Limit order rule on non decreasing value:

@@ -1,6 +1,6 @@
 import { BI } from "@ckb-lumos/bi";
 import { Cell, HashType, HexString, Script } from "@ckb-lumos/base";
-export declare function newLimitOrderUtils(sudtType?: Script): {
+export declare function newLimitOrderUtils(limitOrderLock?: Script, sudtType?: Script): {
     create: (data: PackableOrder & {
         ckbAmount?: BI;
         sudtAmount?: BI;
@@ -42,6 +42,17 @@ export declare function newLimitOrderUtils(sudtType?: Script): {
         ckbMultiplier: BI;
         sudtMultiplier: BI;
     };
+    limitOrderLock: {
+        codeHash: string;
+        hashType: HashType;
+        args: string;
+    };
+    sudtType: {
+        codeHash: string;
+        hashType: HashType;
+        args: string;
+    };
+    sudtHash: string;
 };
 export type PackableOrder = {
     terminalLock: {
