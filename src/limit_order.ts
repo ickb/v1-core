@@ -8,9 +8,9 @@ import { minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
 import { Cell, HashType, HexString, Script } from "@ckb-lumos/base";
 import { defaultScript, scriptEq } from "lumos-utils";
 import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
-import { ickbSudtScript } from "./domain_logic";
+import { ickbSudtType } from "./domain_logic";
 
-export function newLimitOrderUtils(limitOrderLock: Script = defaultScript("LIMIT_ORDER"), sudtType: Script = ickbSudtScript()) {
+export function newLimitOrderUtils(limitOrderLock: Script = defaultScript("LIMIT_ORDER"), sudtType: Script = ickbSudtType()) {
     const sudtHash = computeScriptHash(sudtType);
 
     function create(data: PackableOrder & { ckbAmount?: BI, sudtAmount?: BI }) {
@@ -22,7 +22,7 @@ export function newLimitOrderUtils(limitOrderLock: Script = defaultScript("LIMIT
             },
             data: hexify(Uint128LE.pack((data.sudtAmount || 0)))
         }
-        cell.cellOutput.capacity = (data.ckbAmount || minimalCellCapacityCompatible(cell)).toHexString();
+        cell.cellOutput.capacity = (data.ckbAmount || minimalCellCapacityCompatible(cell, { validate: false })).toHexString();
 
         return cell;
     }
@@ -46,7 +46,7 @@ export function newLimitOrderUtils(limitOrderLock: Script = defaultScript("LIMIT
                 return cell;
             }
         } else {
-            const outCkb = minimalCellCapacityCompatible(cell);
+            const outCkb = minimalCellCapacityCompatible(cell, { validate: false });
             const outSudt = calculate(data.ckbMultiplier, data.sudtMultiplier, data.ckbAmount, data.sudtAmount, outCkb);
             cell.cellOutput.capacity = outCkb.toHexString();
             cell.data = hexify(Uint128LE.pack(outSudt));
