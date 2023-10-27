@@ -13,9 +13,5 @@ name = "domain_logic"
 template_type = "Rust"
 
 [[contracts]]
-name = "owner_owned"
-template_type = "Rust"
-
-[[contracts]]
 name = "limit_order"
 template_type = "Rust"

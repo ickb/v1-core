@@ -9,13 +9,18 @@ pub enum Error {
     Encoding,
     // Add customized errors here...
     ScriptArgs,
-    Amount,
+    SudtAmount,
     ScriptMisuse,
     DepositTooSmall,
     UnequalDeposit,
-    ReceiptAmount,
+    TwoReceipts,
     NoReceipt,
-    NoDeposit,
+    ReceiptOwnedCount,
+    ReceiptCount,
+    ReceiptAmount,
+    NoOwned,
+    ReceiptAlreadyFound,
+    OwnedCountMismatch,
 }
 
 impl From<SysError> for Error {

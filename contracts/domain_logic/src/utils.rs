@@ -12,24 +12,29 @@ pub fn extract_token_amount(index: usize, source: Source) -> Result<u128, Error>
     Ok(token_amount)
 }
 
-pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u64, u64), Error> {
+pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u8, u8, u64), Error> {
     let data = load_cell_data(index, source)?;
 
     if data.len() < 8 {
         return Err(Error::Encoding);
     }
 
-    let mut buffer = [0u8; 8];
+    // The first byte contains the count of the receipt owned cells excluding deposits.
+    let receipt_owned_count = data[0];
 
-    // From the first byte to the second is stored in little endian the count of the contiguous deposits.
-    buffer[0..2].copy_from_slice(&data[0..2]); // The last six bytes of the buffer are already zero.
-    let receipt_count = u64::from_le_bytes(buffer);
+    // The second byte contains the count of the deposits.
+    let receipt_deposit_count = data[1];
 
     // From the 3th byte to the 8th is stored in little endian the amount of a single deposit.
+    let mut buffer = [0u8; 8];
     buffer[0..6].copy_from_slice(&data[2..8]); // The last two bytes of the buffer are already zero.
-    let receipt_amount = u64::from_le_bytes(buffer);
+    let receipt_deposit_amount = u64::from_le_bytes(buffer);
 
-    Ok((receipt_count, receipt_amount))
+    Ok((
+        receipt_owned_count,
+        receipt_deposit_count,
+        receipt_deposit_amount,
+    ))
 }
 
 pub fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, Error> {

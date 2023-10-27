@@ -32,7 +32,7 @@ pub enum CellType {
 }
 
 impl Iterator for CellTypeIter {
-    type Item = Result<(usize, Source, CellType), Error>;
+    type Item = Result<(usize, Source, CellType, bool), Error>;
 
     // Iterates over the specified sources, returning the index and type of found iCKB cells.
     // Returns an error in case of preventable iCKB scripts misuse in output cells.
@@ -54,25 +54,36 @@ impl Iterator for CellTypeIter {
             ),
         };
 
-        let mut ok = |cell_type| {
+        let mut ok = |cell_type, is_owned| {
             let index = self.index;
             self.index += 1;
-            Some(Ok((index, self.source, cell_type)))
+            Some(Ok((index, self.source, cell_type, is_owned)))
         };
 
-        match (lock_script_type, type_script_type, self.source) {
-            (ScriptType::ICKBScript, ScriptType::NervosDaoDeposit, _) => ok(CellType::Deposit),
-            (ScriptType::ICKBScript, ScriptType::None, _) => ok(CellType::Unknown),
-            (ScriptType::ICKBScript, ScriptType::Unknown, _) => ok(CellType::Unknown),
-            (ScriptType::ICKBScript, _, Source::Input) => ok(CellType::Unknown),
-            (ScriptType::ICKBScript, _, _) => err(Error::ScriptMisuse),
-            (_, ScriptType::ICKBScript, _) => ok(CellType::Receipt),
-            (_, ScriptType::ICKBSUDT, _) => ok(CellType::Token),
-            (_, _, Source::Input) => ok(CellType::Unknown),
-            (ScriptType::Unknown, ScriptType::None, _) => ok(CellType::Unknown),
-            (ScriptType::Unknown, ScriptType::Unknown, _) => ok(CellType::Unknown),
-            (ScriptType::Unknown, ScriptType::NervosDaoDeposit, _) => ok(CellType::Unknown),
-            _ => err(Error::ScriptMisuse),
+        match (lock_script_type, type_script_type) {
+            //Errors to bubble up
+
+            //General errors in cell structure
+            (ScriptType::NervosDaoDeposit, _) => err(Error::ScriptMisuse),
+            (ScriptType::ICKBSUDT, _) => err(Error::ScriptMisuse),
+            (ScriptType::None, _) => err(Error::ScriptMisuse),
+
+            //Protocol specific errors
+            (ScriptType::ICKBScript, ScriptType::ICKBScript) => err(Error::ScriptMisuse),
+
+            //Valid cell configurations
+
+            //SUDT Cell
+            (ScriptType::ICKBScript, ScriptType::ICKBSUDT) => ok(CellType::Token, true), //Owned cell
+            (_, ScriptType::ICKBSUDT) => ok(CellType::Token, false),
+
+            //Receipt specific cells
+            (_, ScriptType::ICKBScript) => ok(CellType::Receipt, false),
+            (ScriptType::ICKBScript, ScriptType::NervosDaoDeposit) => ok(CellType::Deposit, false),
+            (ScriptType::ICKBScript, _) => ok(CellType::Unknown, true), //General owned cell
+
+            //Unknown cells configurations
+            (ScriptType::Unknown, _) => ok(CellType::Unknown, false),
         }
     }
 }
