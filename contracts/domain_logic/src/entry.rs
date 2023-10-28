@@ -74,11 +74,9 @@ fn check_input(ickb_script_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> 
     return Ok((total_ickb_amount, total_receipts_ickb, total_deposits_ickb));
 }
 
-const CKB_DECIMALS: u64 = 8;
-const CKB_MINIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT: u64 = 82 * 10 ^ CKB_DECIMALS; // 82 CKB
-const ICKB_DECIMALS: u128 = 8; // CKB and iCKB have the same number of decimals
-const ICKB_SOFT_CAP_PER_DEPOSIT: u128 = 100_000 * 10 ^ ICKB_DECIMALS; // 100_000 iCKB.
-const GENESIS_ACCUMULATED_RATE: u128 = 10 ^ 16; // Genesis block accumulated rate.
+const CKB_MINIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT: u64 = 82 * 100_000_000; // 82 CKB
+const ICKB_SOFT_CAP_PER_DEPOSIT: u128 = 100_000 * 100_000_000; // 100_000 iCKB.
+const GENESIS_ACCUMULATED_RATE: u128 = 100_000_000 * 100_000_000; // 10^16 Genesis block accumulated rate.
 
 fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Error> {
     let amount = u128::from(amount);
@@ -142,27 +140,33 @@ fn check_output(ickb_script_hash: [u8; 32]) -> Result<u128, Error> {
         }
     }
 
-    let (receipt_owned_count, receipt_deposit_count, receipt_deposit_amount) =
-        match maybe_receipt_index {
-            Some(index) => extract_receipt_data(index, Source::Output)?,
-            None => return Err(Error::NoReceipt),
-        };
+    match maybe_receipt_index {
+        Some(index) => {
+            let (receipt_owned_count, receipt_deposit_count, receipt_deposit_amount) =
+                extract_receipt_data(index, Source::Output)?;
 
-    if owned_count != receipt_owned_count as u64 {
-        return Err(Error::ReceiptOwnedCount);
-    }
+            if owned_count != receipt_owned_count as u64 {
+                return Err(Error::ReceiptOwnedCount);
+            }
 
-    if deposit_count != receipt_deposit_count as u64 {
-        return Err(Error::ReceiptCount);
-    }
+            if deposit_count != receipt_deposit_count as u64 {
+                return Err(Error::ReceiptCount);
+            }
 
-    if deposit_amount != receipt_deposit_amount {
-        return Err(Error::ReceiptAmount);
-    }
+            if deposit_amount != receipt_deposit_amount {
+                return Err(Error::ReceiptAmount);
+            }
 
-    if receipt_owned_count == 0 {
-        return Err(Error::NoOwned);
-    }
+            if receipt_owned_count == 0 {
+                return Err(Error::NoOwned);
+            }
+        }
+        None => {
+            if owned_count > 0 || deposit_count > 0 {
+                return Err(Error::NoReceipt);
+            }
+        }
+    };
 
     return Ok(total_ickb_amount);
 }

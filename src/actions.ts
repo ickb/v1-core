@@ -43,22 +43,17 @@ export function withdrawFrom(transactionBuilder: IckbTransactionBuilder, ...depo
 }
 
 export async function fund(transactionBuilder: IckbTransactionBuilder): Promise<IckbTransactionBuilder> {
-    type Missing = "NONE" | "CKB" | "ICKB_SUDT";
-    let missing: Missing = "ICKB_SUDT";
     const is_well_funded = async function () {
         try {
             await transactionBuilder.toTransactionSkeleton()
-            missing = "NONE";
             return true;
         } catch (e: any) {
             //Improve error typing or define this function on builder itself/////////////////////////////////////////
             if (e.message === "Missing CKB: not enough funds to execute the transaction") {
-                missing = "CKB";
                 return false;
             }
 
             if (e.message === "Missing iCKB SUDT: not enough funds to execute the transaction") {
-                missing = "ICKB_SUDT";
                 return false;
             }
             throw e;
@@ -129,22 +124,16 @@ export async function fund(transactionBuilder: IckbTransactionBuilder): Promise<
     }
 
     //Try adding iCKB SUDT and see if it helps
-    if (missing === "ICKB_SUDT") {
-        for await (const sudtCell of new CellCollector(indexer, {
-            scriptSearchMode: "exact",
-            withData: true,
-            type: ickbSudtType(),
-            lock: transactionBuilder.getAccountLock()
-        }).collect()) {
-            transactionBuilder.add("input", "end", sudtCell);
+    for await (const sudtCell of new CellCollector(indexer, {
+        scriptSearchMode: "exact",
+        withData: true,
+        type: ickbSudtType(),
+        lock: transactionBuilder.getAccountLock()
+    }).collect()) {
+        transactionBuilder.add("input", "end", sudtCell);
 
-            if (await is_well_funded()) {
-                return transactionBuilder;
-            }
-        }
-        //If it's still missing ICKB SUDT bubble up the error
-        if (missing === "ICKB_SUDT") {
-            await transactionBuilder.toTransactionSkeleton();
+        if (await is_well_funded()) {
+            return transactionBuilder;
         }
     }
 

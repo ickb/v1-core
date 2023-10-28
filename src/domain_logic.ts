@@ -1,15 +1,15 @@
-import { Cell, Header, Script } from "@ckb-lumos/base";
+import { Cell, Header, Hexadecimal, Script } from "@ckb-lumos/base";
 import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
 import { BI, BIish, parseUnit } from "@ckb-lumos/bi";
 import { hexify } from "@ckb-lumos/codec/lib/bytes";
 import { struct } from "@ckb-lumos/codec/lib/molecule";
 import { Uint128LE, Uint8 } from "@ckb-lumos/codec/lib/number";
 import { extractDaoDataCompatible } from "@ckb-lumos/common-scripts/lib/dao";
-import { minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
+import { TransactionSkeletonType, minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
 import { TransactionBuilder, createUintBICodec, defaultScript, isDAODeposit, scriptEq } from "lumos-utils";
 
 export class IckbTransactionBuilder extends TransactionBuilder {
-    override async toChange(ckbDelta: BI, changeCells: Cell[] = []) {
+    protected override async toChange(ckbDelta: BI, changeCells: Cell[] = []) {
         function changeCellsPush(c: Cell) {
             const minimalCapacity = minimalCellCapacityCompatible(c, { validate: false });
             if (ckbDelta.lt(minimalCapacity)) {
@@ -66,7 +66,7 @@ export class IckbTransactionBuilder extends TransactionBuilder {
         }
 
         //Add iCKB SUDT change cell
-        const ickbDelta = await this.getIckbDelta(changeCells);
+        const ickbDelta = await this.getIckbDelta(this.inputs, [...this.outputs, ...changeCells]);
         if (ickbDelta.lt(0)) {
             throw Error("Missing iCKB SUDT: not enough funds to execute the transaction");
         } else if (ickbDelta.eq(0)) {
@@ -86,9 +86,9 @@ export class IckbTransactionBuilder extends TransactionBuilder {
         return super.toChange(ckbDelta, changeCells);
     }
 
-    async getIckbDelta(changeCells: Cell[]) {
+    async getIckbDelta(inputs: Cell[] = this.inputs, outputs: Cell[] = this.outputs) {
         let ickbDelta = BI.from(0);
-        for (const c of this.inputs) {
+        for (const c of inputs) {
             //iCKB token
             if (scriptEq(c.cellOutput.type, ickbSudtType())) {
                 ickbDelta = ickbDelta.add(Uint128LE.unpack(c.data));
@@ -111,7 +111,7 @@ export class IckbTransactionBuilder extends TransactionBuilder {
             }
         }
 
-        for (const c of [...this.outputs, ...changeCells]) {
+        for (const c of outputs) {
             //iCKB token
             if (scriptEq(c.cellOutput.type, ickbSudtType())) {
                 ickbDelta = ickbDelta.sub(Uint128LE.unpack(c.data));
@@ -119,6 +119,20 @@ export class IckbTransactionBuilder extends TransactionBuilder {
         }
 
         return ickbDelta;
+    }
+
+    protected override async getHeaderDepsBlockNumbers(transaction: TransactionSkeletonType): Promise<Hexadecimal[]> {
+        const blockNumbers = await super.getHeaderDepsBlockNumbers(transaction);
+        for (const c of transaction.inputs) {
+            if (!c.blockNumber) {
+                throw Error("Cell must have blockNumber populated");
+            }
+
+            if (scriptEq(c.cellOutput.type, defaultScript("DOMAIN_LOGIC"))) {
+                blockNumbers.push(c.blockNumber);
+            }
+        }
+        return blockNumbers;
     }
 }
 
