@@ -20,7 +20,7 @@
     "@ckb-lumos/helpers": "^0.20.0",
     "@ckb-lumos/hd": "^0.20.0",
     "@ckb-lumos/rpc": "^0.20.0",
-    "lumos-utils": "https://github.com/phroi/lumos-utils#db19ef4"
+    "lumos-utils": "phroi/lumos-utils"
   },
   "devDependencies": {
     "@types/node": "^20.4.4",

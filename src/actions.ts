@@ -1,6 +1,6 @@
 import { defaultScript, epochCompare, fund as baseFund, getRpc, getSyncedIndexer, isDAOWithdrawal, parseEpoch, TransactionBuilder, DAO_DEPOSIT_DATA, isDAODeposit } from "lumos-utils";
 import { IckbTransactionBuilder, ReceiptCodec, ickbSudtType } from "./domain_logic";
-import { Cell } from "@ckb-lumos/base";
+import { Cell, Header } from "@ckb-lumos/base";
 import { CellCollector } from "@ckb-lumos/ckb-indexer";
 import { BI, parseUnit } from "@ckb-lumos/bi";
 import { hexify } from "@ckb-lumos/codec/lib/bytes";
@@ -42,8 +42,9 @@ export function withdrawFrom(transactionBuilder: IckbTransactionBuilder, ...depo
         .add("output", "start", ...withdrawals);
 }
 
-export async function fund(transactionBuilder: IckbTransactionBuilder): Promise<IckbTransactionBuilder> {
-    const is_well_funded = async function () {
+export async function fund(transactionBuilder: IckbTransactionBuilder, addAll: boolean = false, tipHeader?: Header): Promise<IckbTransactionBuilder> {
+    tipHeader = tipHeader ?? await getRpc().getTipHeader();
+    const is_well_funded = addAll ? async () => false : async () => {
         try {
             await transactionBuilder.toTransactionSkeleton()
             return true;
@@ -67,15 +68,13 @@ export async function fund(transactionBuilder: IckbTransactionBuilder): Promise<
     const indexer = await getSyncedIndexer();
 
     //Try adding receipts and see if it helps
-    const tipEpoch = parseEpoch((await getRpc().getTipHeader()).epoch);//Maybe pass as parameter to the fund function///
+    const tipEpoch = parseEpoch(tipHeader.epoch);//Maybe pass as parameter to the fund function///
     for await (const receiptCell of new CellCollector(indexer, {
         scriptSearchMode: "exact",
         withData: true,
         type: defaultScript("DOMAIN_LOGIC"),
         lock: transactionBuilder.getAccountLock()
     }).collect()) {
-        const { ownedQuantity } = ReceiptCodec.unpack(receiptCell.data);
-
         //Add owned cells referenced in the receipt
         let ownedCells: Cell[] = [];
         for await (const ownedCell of new CellCollector(indexer, {
@@ -137,5 +136,5 @@ export async function fund(transactionBuilder: IckbTransactionBuilder): Promise<
         }
     }
 
-    return baseFund(transactionBuilder) as Promise<IckbTransactionBuilder>;
+    return baseFund(transactionBuilder, addAll, tipHeader) as Promise<IckbTransactionBuilder>;
 }
