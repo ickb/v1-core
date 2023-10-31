@@ -43,7 +43,7 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
     if out_script.as_slice() != in_script.as_slice()
         && out_script.as_slice() != terminal_lock.as_slice()
     {
-        return Err(Error::Encoding);
+        return Err(Error::InvalidOutputLock);
     }
 
     let (out_ckb_amount, out_sudt_amount, script_type, cell_data_len) =
@@ -53,7 +53,7 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
     match (script_type, cell_data_len) {
         (ScriptType::None, 0) => (),
         (ScriptType::SUDT, 16) => (),
-        _ => return Err(Error::Encoding),
+        _ => return Err(Error::InvalidInputType),
     };
 
     // Check that limit order does not lose value.
@@ -93,7 +93,7 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
             return Ok(());
         }
 
-        return Err(Error::Encoding);
+        return Err(Error::InvalidAction);
     } else {
         // CKB -> SUDT
         // Terminal state.
@@ -121,7 +121,7 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
             return Ok(());
         }
 
-        return Err(Error::Encoding);
+        return Err(Error::InvalidAction);
     }
 }
 
@@ -164,10 +164,10 @@ enum Role {
 }
 pub fn extract_args_data(script: &Script) -> Result<(Script, [u8; 32], bool, U256, U256), Error> {
     let args: Bytes = script.args().unpack();
-    let mut lengths: [usize; 7] = [32, 1, 0, 32, 1, 32, 32];
+    let mut lengths: [usize; 7] = [32, 1, 0, 32, 1, 8, 8];
     let minimum_length: usize = lengths.iter().sum();
     if args.len() < minimum_length {
-        return Err(Error::Encoding);
+        return Err(Error::ArgsTooShort);
     }
     lengths[Role::TerminalLockArgs as usize] = args.len() - minimum_length;
 
@@ -192,8 +192,8 @@ pub fn extract_args_data(script: &Script) -> Result<(Script, [u8; 32], bool, U25
 
     // Multipliers are only positive numbers, so they are encoded subtracting 1 to avoid the zero value.
     // Note on Overflow: u64 quantities represented with u256, no overflow is possible.
-    let ckb_multiplier = U256::from(u64_from(data[Role::CkbMultiplier as usize], 32 + 1 + 8)?) + 1;
-    let sudt_multiplier = U256::from(u64_from(data[Role::SudtMultiplier as usize], 32 + 1)?) + 1;
+    let ckb_multiplier = U256::from(u64_from(data[Role::CkbMultiplier as usize], 0)?) + 1;
+    let sudt_multiplier = U256::from(u64_from(data[Role::SudtMultiplier as usize], 0)?) + 1;
 
     Ok((
         terminal_lock,

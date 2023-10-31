@@ -159,8 +159,8 @@ export type PackableOrder = {
     }
     sudtHash: HexString,     // 32 bytes
     isSudtToCkb: boolean,    // 1 byte
-    ckbMultiplier: BI,       // 32 bytes
-    sudtMultiplier: BI,      // 32 bytes
+    ckbMultiplier: BI,       // 8 bytes
+    sudtMultiplier: BI,      // 8 bytes
 }
 
 const newParametricLimitOrderCodec = (argsLength: number) => {

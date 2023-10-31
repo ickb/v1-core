@@ -76,7 +76,7 @@ export async function fund(transactionBuilder: IckbTransactionBuilder, addAll: b
         lock: transactionBuilder.getAccountLock()
     }).collect()) {
         //Add owned cells referenced in the receipt
-        let ownedCells: Cell[] = [];
+        let cells: Cell[] = [receiptCell];
         for await (const ownedCell of new CellCollector(indexer, {
             scriptSearchMode: "exact",
             withData: true,
@@ -97,7 +97,7 @@ export async function fund(transactionBuilder: IckbTransactionBuilder, addAll: b
 
             //Check if it's an owner lock cell
             if (ownedCell.cellOutput.type == undefined) {
-                ownedCells.push(ownedCell);
+                cells.push(ownedCell);
                 continue;
             }
 
@@ -105,17 +105,19 @@ export async function fund(transactionBuilder: IckbTransactionBuilder, addAll: b
             if (isDAOWithdrawal(ownedCell)) {
                 const maturityEpoch = parseEpoch(await transactionBuilder.withdrawedDaoSince(ownedCell));
                 if (epochCompare(maturityEpoch, tipEpoch) < 1) {//Withdrawal request is ripe
-                    ownedCells.push(ownedCell);
+                    cells.push(ownedCell);
                     continue;
                 }
             }
 
             //Due to the receipt script constraints either all or no owned cells can be unlocked
-            ownedCells = [];
+            cells = [];
             break;
         }
 
-        transactionBuilder.add("input", "end", receiptCell, ...ownedCells);
+        if (cells.length > 0) {
+            transactionBuilder.add("input", "end", ...cells);
+        }
 
         if (await is_well_funded()) {
             return transactionBuilder;
