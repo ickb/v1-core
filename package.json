@@ -1,5 +1,5 @@
 {
-  "name": "v1-core",
+  "name": "@ickb/v1-core",
   "version": "1.0.0",
   "description": "",
   "main": "lib/index.js",
@@ -12,19 +12,18 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@ckb-lumos/base": "^0.20.0",
-    "@ckb-lumos/bi": "^0.20.0",
-    "@ckb-lumos/ckb-indexer": "^0.20.0",
-    "@ckb-lumos/codec": "^0.20.0",
-    "@ckb-lumos/common-scripts": "^0.20.0",
-    "@ckb-lumos/helpers": "^0.20.0",
-    "@ckb-lumos/hd": "^0.20.0",
-    "@ckb-lumos/rpc": "^0.20.0",
-    "lumos-utils": "phroi/lumos-utils"
+    "@ckb-lumos/base": "^0.21.1",
+    "@ckb-lumos/bi": "^0.21.1",
+    "@ckb-lumos/ckb-indexer": "^0.21.1",
+    "@ckb-lumos/codec": "^0.21.1",
+    "@ckb-lumos/common-scripts": "^0.21.1",
+    "@ckb-lumos/helpers": "^0.21.1",
+    "@ckb-lumos/hd": "^0.21.1",
+    "@ckb-lumos/rpc": "^0.21.1",
+    "@ickb/lumos-utils": "^1.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.4.4",
-    "ts-node": "^10.9.1",
-    "typescript": "^5.1.6"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
   }
 }

@@ -146,6 +146,4 @@ Please refer to the [initial Setup section](#setup).
 
 ## Licensing
 
-The license for everything except iCKB core contracts is the MIT License, see the [`LICENSE`](./LICENSE).
-
-The license for iCKB core contracts is the Business Source License 1.1 (`BUSL-1.1`), see the [`LICENSE`](./contracts/LICENSE) in contracts.
+The license is the MIT License, see the [`LICENSE`](./LICENSE).

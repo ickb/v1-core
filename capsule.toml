@@ -4,12 +4,10 @@
 # workspace_dir = "."
 
 # capsule version
-version = "0.10.1"
-# path of deployment config file
-deployment = "deployment.toml"
+version = "0.10.3"
 
 [[contracts]]
-name = "domain_logic"
+name = "ickb_logic"
 template_type = "Rust"
 
 [[contracts]]
