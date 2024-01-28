@@ -1,5 +1,5 @@
 import { Cell, Hash } from "@ckb-lumos/base";
-import { parseAbsoluteEpochSince, parseEpoch } from "@ckb-lumos/base/lib/since";
+import { EpochSinceValue, parseAbsoluteEpochSince, parseEpoch } from "@ckb-lumos/base/lib/since";
 import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
 import { BI, BIish, parseUnit } from "@ckb-lumos/bi";
 import { hexify } from "@ckb-lumos/codec/lib/bytes";
@@ -10,7 +10,7 @@ import { TransactionSkeleton, TransactionSkeletonType, minimalCellCapacityCompat
 import {
     Assets,
     I8Cell, I8Header, I8Script, addAsset, addCells, capacitiesSifter, createUintBICodec,
-    daoDeposit, daoRequestWithdrawalFrom, daoSifter, daoWithdrawFrom, defaultScript,
+    daoDeposit, daoRequestWithdrawalFrom, daoRequestWithdrawalWith, daoSifter, daoWithdrawFrom, defaultScript,
     epochSinceCompare, errorUndefinedBlockNumber, headerDeps, isDaoDeposit, scriptEq, since
 } from "@ickb/lumos-utils";
 
@@ -121,6 +121,27 @@ export function ickbDeposit(tx: TransactionSkeletonType, depositQuantity: number
 
 export function ickbRequestWithdrawalFrom(tx: TransactionSkeletonType, deposits: Iterable<I8Cell>) {
     return daoRequestWithdrawalFrom(tx, deposits, ickbLogicScript());
+}
+
+export function ickbRequestWithdrawalWith(
+    tx: TransactionSkeletonType,
+    deposits: Iterable<I8Cell>,
+    tipHeader: I8Header,
+    maxWithdrawalAmount: BI,
+    maxWithdrawalCells: number = Number.POSITIVE_INFINITY,
+    minLock: EpochSinceValue = { length: 16, index: 1, number: 0 },// 1/8 epoch (~ 15 minutes)
+    maxLock: EpochSinceValue = { length: 4, index: 1, number: 0 }// 1/4 epoch (~ 1 hour)
+) {
+    return daoRequestWithdrawalWith(
+        tx,
+        deposits,
+        ickbLogicScript(),
+        tipHeader,
+        maxWithdrawalAmount,
+        maxWithdrawalCells,
+        minLock,
+        maxLock
+    );
 }
 
 export function ickbSudtFundAdapter(
