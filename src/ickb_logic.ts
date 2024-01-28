@@ -6,9 +6,10 @@ import { hexify } from "@ckb-lumos/codec/lib/bytes";
 import { struct } from "@ckb-lumos/codec/lib/molecule/layout";
 import { Uint128LE, Uint8 } from "@ckb-lumos/codec/lib/number/uint";
 import { extractDaoDataCompatible } from "@ckb-lumos/common-scripts/lib/dao";
-import { TransactionSkeletonType, minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
+import { TransactionSkeleton, TransactionSkeletonType, minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
 import {
-    Asset2Fund, I8Cell, I8Header, I8Script, addAsset, addCells, capacitiesSifter, createUintBICodec,
+    Assets,
+    I8Cell, I8Header, I8Script, addAsset, addCells, capacitiesSifter, createUintBICodec,
     daoDeposit, daoRequestWithdrawalFrom, daoSifter, daoWithdrawFrom, defaultScript,
     epochSinceCompare, errorUndefinedBlockNumber, headerDeps, isDaoDeposit, scriptEq, since
 } from "@ickb/lumos-utils";
@@ -123,46 +124,16 @@ export function ickbRequestWithdrawalFrom(tx: TransactionSkeletonType, deposits:
 }
 
 export function ickbSudtFundAdapter(
-    asset2Fund: Asset2Fund,
+    assets: Assets,
     accountLock: I8Script,
     sudts: Iterable<I8Cell>,
     tipHeader?: I8Header,
     ickbGroups?: Iterable<IckbGroup>
-): Asset2Fund {
-    const ckbAddFunds: ((tx: TransactionSkeletonType) => TransactionSkeletonType)[] = [];
-    const addFunds: typeof ckbAddFunds = [];
-    if (tipHeader && ickbGroups) {
-        const tipEpoch = parseEpoch(tipHeader.epoch)
-        for (const { receipt, withdrawalRequests, capacities: owned } of ickbGroups) {
-            const someAreNotReady = withdrawalRequests.some(wr => {
-                const withdrawalEpoch = parseAbsoluteEpochSince(wr.cellOutput.type![since]);
-                return epochSinceCompare(tipEpoch, withdrawalEpoch) === -1
-            });
-            if (someAreNotReady) {
-                continue;
-            }
-
-            const addFund = (tx: TransactionSkeletonType) => {
-                tx = daoWithdrawFrom(tx, withdrawalRequests);
-                tx = addCells(tx, "append", [receipt, ...owned], [])
-                return tx;
-            }
-
-            const { depositQuantity } = ReceiptCodec.unpack(receipt.data);
-            if (depositQuantity > 0) {//It will mint some iCKB SUDT
-                addFunds.push(addFund);
-            } else {
-                ckbAddFunds.push(addFund);
-            }
-        }
-    }
-
-    for (const c of sudts) {
-        addFunds.push((tx: TransactionSkeletonType) => addCells(tx, "append", [c], []));
-    }
+): Assets {
+    const getDelta = (tx: TransactionSkeletonType) => ickbDelta(tx);
 
     const addChange = (tx: TransactionSkeletonType) => {
-        const delta = ickbDelta(tx);
+        const delta = getDelta(tx);
         if (delta.lt(0)) {
             return undefined;
         }
@@ -213,10 +184,35 @@ export function ickbSudtFundAdapter(
         return addCells(tx, "append", [], [changeCell]);
     }
 
-    const getDelta = (tx: TransactionSkeletonType) => ickbDelta(tx);
+    const addFunds: ((tx: TransactionSkeletonType) => TransactionSkeletonType)[] = [];
+    const unavailableGroups: I8Cell[] = [];
+    if (tipHeader && ickbGroups) {
+        const tipEpoch = parseEpoch(tipHeader.epoch)
+        for (const { receipt, withdrawalRequests, capacities: owned } of ickbGroups) {
+            const someAreNotReady = withdrawalRequests.some(wr => {
+                const withdrawalEpoch = parseAbsoluteEpochSince(wr.cellOutput.type![since]);
+                return epochSinceCompare(tipEpoch, withdrawalEpoch) === -1
+            });
+            if (someAreNotReady) {
+                unavailableGroups.push(receipt, ...withdrawalRequests, ...owned)
+                continue;
+            }
 
-    asset2Fund = addAsset(asset2Fund, "CKB", ckbAddFunds);
-    return addAsset(asset2Fund, "ICKB_SUDT", addFunds, addChange, getDelta);
+            addFunds.push((tx: TransactionSkeletonType) => {
+                tx = daoWithdrawFrom(tx, withdrawalRequests);
+                tx = addCells(tx, "append", [receipt, ...owned], [])
+                return tx;
+            });
+        }
+    }
+
+    for (const c of sudts) {
+        addFunds.push((tx: TransactionSkeletonType) => addCells(tx, "append", [c], []));
+    }
+
+    const unavailableFunds = [TransactionSkeleton().update("inputs", i => i.push(...unavailableGroups))];
+
+    return addAsset(assets, "ICKB_SUDT", getDelta, addChange, addFunds, unavailableFunds);
 }
 
 export function ickbDelta(tx: TransactionSkeletonType) {
