@@ -42,7 +42,7 @@ async function main() {
         "0xd00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2bc"
     );
 
-    const commit = async (cells: Iterable<I8Cell>) => {
+    const commit = async (cells: readonly I8Cell[]) => {
         const { owned: capacities } = capacitiesSifter(
             (await getCells({
                 script: lockScript,
@@ -66,7 +66,7 @@ async function main() {
             capacities
         ));
         const txHash = await sendTransaction(signer(tx));
-        return outputs.map((_, index) => I8OutPoint.from({ txHash, index: BI.from(index).toHexString() }))
+        return outputs.map((_, i) => I8OutPoint.from({ txHash, index: BI.from(i).toHexString() })).toArray();
     }
 
     console.log("Deploying iCKB contracts...");

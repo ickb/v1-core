@@ -21,7 +21,7 @@ export type IckbGroup = {
 };
 
 export function ickbSifter(
-    inputs: Iterable<Cell>,
+    inputs: readonly Cell[],
     accountLockExpander: (c: Cell) => I8Script | undefined,
     getHeader: (blockNumber: string, context: Cell) => I8Header
 ) {
@@ -119,13 +119,13 @@ export function ickbDeposit(tx: TransactionSkeletonType, depositQuantity: number
     return daoDeposit(tx, Array(depositQuantity).fill(depositAmount), ickbLogicScript());
 }
 
-export function ickbRequestWithdrawalFrom(tx: TransactionSkeletonType, deposits: Iterable<I8Cell>) {
+export function ickbRequestWithdrawalFrom(tx: TransactionSkeletonType, deposits: readonly I8Cell[]) {
     return daoRequestWithdrawalFrom(tx, deposits, ickbLogicScript());
 }
 
 export function ickbRequestWithdrawalWith(
     tx: TransactionSkeletonType,
-    deposits: Iterable<I8Cell>,
+    deposits: readonly I8Cell[],
     tipHeader: I8Header,
     maxWithdrawalAmount: BI,
     maxWithdrawalCells: number = Number.POSITIVE_INFINITY,
@@ -147,9 +147,9 @@ export function ickbRequestWithdrawalWith(
 export function ickbSudtFundAdapter(
     assets: Assets,
     accountLock: I8Script,
-    sudts: Iterable<I8Cell>,
+    sudts: readonly I8Cell[],
     tipHeader?: I8Header,
-    ickbGroups?: Iterable<IckbGroup>
+    ickbGroups?: readonly IckbGroup[]
 ): Assets {
     const getDelta = (tx: TransactionSkeletonType) => ickbDelta(tx);
 
@@ -205,8 +205,8 @@ export function ickbSudtFundAdapter(
         return addCells(tx, "append", [], [changeCell]);
     }
 
-    const addFunds: ((tx: TransactionSkeletonType) => TransactionSkeletonType)[] = [];
     const unavailableGroups: I8Cell[] = [];
+    const addFunds = sudts.map(c => (tx: TransactionSkeletonType) => addCells(tx, "append", [c], []));
     if (tipHeader && ickbGroups) {
         const tipEpoch = parseEpoch(tipHeader.epoch)
         for (const { receipt, withdrawalRequests, capacities: owned } of ickbGroups) {
@@ -225,10 +225,6 @@ export function ickbSudtFundAdapter(
                 return tx;
             });
         }
-    }
-
-    for (const c of sudts) {
-        addFunds.push((tx: TransactionSkeletonType) => addCells(tx, "append", [c], []));
     }
 
     const unavailableFunds = [TransactionSkeleton().update("inputs", i => i.push(...unavailableGroups))];

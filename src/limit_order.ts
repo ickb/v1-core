@@ -13,7 +13,10 @@ import {
 } from "@ickb/lumos-utils";
 import { ickbSudtType } from "./ickb_logic";
 
-export function limitOrder(sudtType: I8Script = ickbSudtType()) {
+export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
+    if (sudtType == i8ScriptPadding) {
+        sudtType = ickbSudtType();
+    }
     const orderLock = limitOrderLock();
     const sudtHash = computeScriptHash(sudtType);
 
@@ -120,7 +123,7 @@ export function limitOrder(sudtType: I8Script = ickbSudtType()) {
         return i8lock;
     }
 
-    function sifter(inputs: Iterable<Cell>) {
+    function sifter(inputs: readonly Cell[]) {
         let { owned, unknowns } = capacitiesSifter(inputs, expander);
         let ownedTmp = owned;
         ({ owned, unknowns } = sudtSifter(unknowns, sudtType, expander));
