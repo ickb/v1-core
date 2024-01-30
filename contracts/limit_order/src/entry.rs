@@ -137,7 +137,7 @@ fn extract_amounts(
     source: Source,
     sudt_hash: [u8; 32],
 ) -> Result<(U256, U256, ScriptType, usize), Error> {
-    let ckb_amount = U256::from(load_cell_capacity(index, Source::Input)?);
+    let ckb_amount = U256::from(load_cell_capacity(index, source)?);
 
     let data = load_cell_data(index, source)?;
 
