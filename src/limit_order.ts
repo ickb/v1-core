@@ -145,8 +145,12 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
         };
     }
 
+    function isValid(order: Cell) {
+        return !!expander(order);
+    }
+
     return {
-        create, fulfill, cancel, extract, expander, sifter,
+        create, fulfill, cancel, extract, expander, sifter, isValid,
         limitOrderLock: orderLock,
         sudtType,
         sudtHash
