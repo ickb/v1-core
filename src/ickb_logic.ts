@@ -11,7 +11,7 @@ import {
     Assets,
     I8Cell, I8Header, I8Script, addAsset, addCells, capacitiesSifter, createUintBICodec,
     daoDeposit, daoRequestWithdrawalFrom, daoRequestWithdrawalWith, daoSifter, daoWithdrawFrom, defaultScript,
-    epochSinceCompare, errorUndefinedBlockNumber, headerDeps, isDaoDeposit, scriptEq, since
+    epochSinceCompare, errorUndefinedBlockNumber, headerDeps, isDaoDeposit, logSplit, scriptEq, since
 } from "@ickb/lumos-utils";
 
 export type IckbGroup = {
@@ -205,11 +205,18 @@ export function ickbSudtFundAdapter(
         return addCells(tx, "append", [], [changeCell]);
     }
 
+
+    const addFunds: ((tx: TransactionSkeletonType) => TransactionSkeletonType)[] = [];
+    for (const ss of logSplit(sudts)) {
+        addFunds.push((tx: TransactionSkeletonType) => addCells(tx, "append", ss, []));
+    }
+
     const unavailableGroups: I8Cell[] = [];
-    const addFunds = sudts.map(c => (tx: TransactionSkeletonType) => addCells(tx, "append", [c], []));
     if (tipHeader && ickbGroups) {
-        const tipEpoch = parseEpoch(tipHeader.epoch)
-        for (const { receipt, withdrawalRequests, capacities: owned } of ickbGroups) {
+        const tipEpoch = parseEpoch(tipHeader.epoch);
+        const availableGroups: IckbGroup[] = [];
+        for (const g of ickbGroups) {
+            const { receipt, withdrawalRequests, capacities: owned } = g;
             const someAreNotReady = withdrawalRequests.some(wr => {
                 const withdrawalEpoch = parseAbsoluteEpochSince(wr.cellOutput.type![since]);
                 return epochSinceCompare(tipEpoch, withdrawalEpoch) === -1
@@ -218,13 +225,24 @@ export function ickbSudtFundAdapter(
                 unavailableGroups.push(receipt, ...withdrawalRequests, ...owned)
                 continue;
             }
-
+            availableGroups.push(g);
+        }
+        for (const gg of logSplit(availableGroups)) {
+            const receipt: I8Cell[] = [];
+            const withdrawalRequests: I8Cell[] = [];
+            const capacities: I8Cell[] = [];
+            for (const { receipt: r, withdrawalRequests: wr, capacities: c } of gg) {
+                receipt.push(r);
+                withdrawalRequests.push(...wr);
+                capacities.push(...c);
+            }
             addFunds.push((tx: TransactionSkeletonType) => {
                 tx = daoWithdrawFrom(tx, withdrawalRequests);
-                tx = addCells(tx, "append", [receipt, ...owned], []);
+                tx = addCells(tx, "append", [...receipt, ...capacities], []);
                 return tx;
             });
         }
+
     }
 
     const unavailableFunds = [TransactionSkeleton().update("inputs", i => i.push(...unavailableGroups))];
