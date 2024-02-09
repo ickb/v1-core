@@ -1,73 +1,68 @@
 use alloc::vec::Vec;
-use ckb_std::{
-    ckb_constants::Source, ckb_types::prelude::Unpack, high_level::load_input_out_point,
-};
 
 use crate::error::Error;
 
 struct Data {
-    key: [u8; 32], //txHash
-    owned_count: u64,
-    receipt_owned_count: u64,
+    key: [u8; 32], //tx_hash
+    owned: u64,
+    receipted: u64,
 }
 
-pub struct OwnedInputValidator(Vec<Data>);
+pub struct OwnedValidator(Vec<Data>);
 
-impl OwnedInputValidator {
-    pub fn new() -> OwnedInputValidator {
-        OwnedInputValidator(Vec::with_capacity(10))
+impl OwnedValidator {
+    pub fn new() -> OwnedValidator {
+        OwnedValidator(Vec::with_capacity(10))
     }
 
-    pub fn validate(&self) -> Result<(), Error> {
-        // For each input receipt validate that owned cells equal to receipt count
+    pub fn unspent_receipted(&mut self) -> Result<Vec<([u8; 32], u64)>, Error> {
+        let mut unspent_receipted = Vec::with_capacity(self.0.len());
+
+        // For each input receipt validate that owned cells less or equal to receipted
         for d in &self.0 {
-            if d.owned_count != d.receipt_owned_count {
-                return Err(Error::OwnedCountMismatch);
+            if d.receipted < d.owned {
+                return Err(Error::OwnedNotReceipted);
+            }
+            if d.owned < d.receipted {
+                unspent_receipted.push((d.key, d.receipted - d.owned));
             }
         }
-        Ok(())
+
+        Ok(unspent_receipted)
     }
 
-    pub fn add_receipt_cell(
-        &mut self,
-        index: usize,
-        receipt_owned_count: u64,
-    ) -> Result<(), Error> {
-        let (position, _, old_receipt_owned_count) = self.position(index)?;
-        if old_receipt_owned_count > 0 {
+    pub fn add_receipted(&mut self, tx_hash: [u8; 32], quantity: u64) -> Result<(), Error> {
+        let (position, _, receipted) = self.position(tx_hash)?;
+        if receipted > 0 {
             return Err(Error::ReceiptAlreadyFound);
         }
-        self.0[position].receipt_owned_count = receipt_owned_count;
+        self.0[position].receipted = quantity;
         Ok(())
     }
 
-    pub fn add_owned_cell(&mut self, index: usize) -> Result<(), Error> {
-        let (position, owned_count, _) = self.position(index)?;
+    pub fn add_owned(&mut self, tx_hash: [u8; 32], quantity: u64) -> Result<(), Error> {
+        let (position, owned, _) = self.position(tx_hash)?;
         // Note on Overflow: even locking the total CKB supply in Owned cells can't overflow this counter.
-        self.0[position].owned_count = owned_count + 1;
+        self.0[position].owned = owned + quantity;
         Ok(())
     }
 
-    fn position(&mut self, index: usize) -> Result<(usize, u64, u64), Error> {
-        let key = load_input_out_point(index, Source::Input)?
-            .tx_hash()
-            .unpack();
-
+    fn position(&mut self, key: [u8; 32]) -> Result<(usize, u64, u64), Error> {
         match self.0.binary_search_by_key(&key, |d: &Data| d.key) {
             Err(position) => {
                 self.0.insert(
                     position,
                     Data {
                         key,
-                        owned_count: 0,
-                        receipt_owned_count: 0,
+                        owned: 0,
+                        receipted: 0,
                     },
                 );
                 Ok((position, 0, 0))
             }
             Ok(position) => {
                 let d = &self.0[position];
-                Ok((position, d.owned_count, d.receipt_owned_count))
+                Ok((position, d.owned, d.receipted))
             }
         }
     }

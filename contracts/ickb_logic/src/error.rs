@@ -15,12 +15,13 @@ pub enum Error {
     UnequalDeposit,
     TwoReceipts,
     NoReceipt,
-    ReceiptOwnedCount,
-    ReceiptCount,
+    ReceiptQuantity,
     ReceiptAmount,
-    NoOwned,
     ReceiptAlreadyFound,
-    OwnedCountMismatch,
+    OwnedNotReceipted,
+    ZeroTxHash,
+    EmptyReceipt,
+    UnspentMismatch,
 }
 
 impl From<SysError> for Error {
