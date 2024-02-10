@@ -215,11 +215,15 @@ const newParametricLimitOrderCodec = (argsLength: number) => {
     );
 }
 
-const minLimitOrderLength = newParametricLimitOrderCodec(0).byteLength;
-
+const size = 100;
+const limitOrderCodecs = Object.freeze(Array.from({ length: size }, (_, i) => newParametricLimitOrderCodec(i)));
 export const LimitOrderCodec = createBytesCodec<PackableOrder>({
-    pack: (packable) =>
-        newParametricLimitOrderCodec((packable.terminalLock.args.length - 2) / 2).pack(packable),
-    unpack: (packed) =>
-        newParametricLimitOrderCodec(packed.length - minLimitOrderLength).unpack(packed),
+    pack: (packable) => {
+        const n = (packable.terminalLock.args.length - 2) / 2;
+        return (n < size ? limitOrderCodecs[n] : newParametricLimitOrderCodec(n)).pack(packable);
+    },
+    unpack: (packed) => {
+        const n = packed.length - limitOrderCodecs[0].byteLength;
+        return (n < size ? limitOrderCodecs[n] : newParametricLimitOrderCodec(n)).unpack(packed);
+    }
 });

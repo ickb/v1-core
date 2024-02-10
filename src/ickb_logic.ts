@@ -363,13 +363,17 @@ const newParametricReceiptCodec = (unspentLength: number) => {
     );
 }
 
-const minReceiptLength = newParametricReceiptCodec(0).byteLength;
-
+const size = 100;
+const receiptCodecs = Object.freeze(Array.from({ length: size }, (_, i) => newParametricReceiptCodec(i)));
 export const ReceiptCodec = createBytesCodec<PackableReceipt>({
-    pack: (packable) =>
-        newParametricReceiptCodec(packable.unspent.length).pack(packable),
-    unpack: (packed) =>
-        newParametricReceiptCodec((packed.length - minReceiptLength) / 33).unpack(packed),
+    pack: (packable) => {
+        const n = packable.unspent.length;
+        return (n < size ? receiptCodecs[n] : newParametricReceiptCodec(n)).pack(packable);
+    },
+    unpack: (packed) => {
+        const n = (packed.length - receiptCodecs[0].byteLength) / 33;
+        return (n < size ? receiptCodecs[n] : newParametricReceiptCodec(n)).unpack(packed);
+    }
 });
 
 export const ICKB_SOFT_CAP_PER_DEPOSIT = parseUnit("100000", "ckb");
