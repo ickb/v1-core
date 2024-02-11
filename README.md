@@ -2,6 +2,38 @@
 
 ## Setup
 
+### Install with npm link
+
+1. Download this repo in a folder of your choice:  
+
+```bash
+git clone https://github.com/ickb/v1-core.git
+```
+
+2. Enter into the repo's folder:
+
+```bash
+cd v1-core/
+```
+
+3. Install dependencies:
+
+```bash
+npm link @ickb/lumos-utils@1.0.0
+```
+
+4. Use `npm link` to make the compiled library available:
+
+```bash
+sudo npm link
+```
+
+5. Set up continuous a process that re-compiles on changes:
+
+```bash
+tsc -w
+```
+
 ### Deploy contracts on local devchain
 
 0. Start local devnet, refer to the [Complete Setup section](#complete-setup) for further instructions:
@@ -10,25 +42,19 @@
 (trap 'kill -INT 0' SIGINT; cd ~/ckb/; ckb run --indexer & sleep 5 && ckb miner)
 ```
 
-1. Download this repo in a folder of your choice:  
+1. Enter into the repo's folder:
 
 ```bash
-git clone https://github.com/ickb/v1-core.git
+cd v1-core
 ```
 
-2. Enter into the repo's utils folder:
+2. Install dependencies:
 
 ```bash
-cd v1-core/utils
+npm link @ickb/lumos-utils@1.0.0
 ```
 
-3. Install utils dependencies:
-
-```bash
-npm i
-```
-
-4. Build and deploy the release version of contracts on devnet:
+3. Build and deploy the release version of contracts on devnet:
 
 ```bash
 npm run deploy release devnet
