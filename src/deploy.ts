@@ -3,7 +3,7 @@ import { ckbHash } from "@ckb-lumos/base/lib/utils";
 import { execSync } from "child_process";
 import { readFile, readdir, writeFile } from "fs/promises";
 import {
-    Chain, DeployScriptData, I8Cell, I8OutPoint, addCells, capacitiesSifter, ckbFundAdapter,
+    Chain, DeployScriptData, I8Cell, I8OutPoint, addCells, capacitySifter, ckbFundAdapter,
     createDepGroup, defaultRpcUrl, deploy, fund, getCells, initializeChainAdapter,
     isChain, scriptNames, secp256k1Blake160, sendTransaction, serializeConfig
 } from "@ickb/lumos-utils";
@@ -43,7 +43,7 @@ async function main() {
     );
 
     const commit = async (cells: readonly I8Cell[]) => {
-        const { owned: capacities } = capacitiesSifter(
+        const { capacities } = capacitySifter(
             (await getCells({
                 script: lockScript,
                 scriptType: "lock",

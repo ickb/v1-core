@@ -8,8 +8,7 @@ import { TransactionSkeletonType } from "@ckb-lumos/helpers";
 import { Cell, HashType, HexString } from "@ckb-lumos/base";
 import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
 import {
-    BooleanCodec, I8Cell, I8Script, addCells, capacitiesSifter,
-    defaultScript, i8ScriptPadding, scriptEq, sudtSifter
+    BooleanCodec, I8Cell, I8Script, addCells, defaultScript, i8ScriptPadding, scriptEq, simpleSifter
 } from "@ickb/lumos-utils";
 import { ickbSudtType } from "./ickb_logic";
 
@@ -124,12 +123,33 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
     }
 
     function sifter(inputs: readonly Cell[]) {
-        let { owned, unknowns } = capacitiesSifter(inputs, expander);
-        let ownedTmp = owned;
-        ({ owned, unknowns } = sudtSifter(unknowns, sudtType, expander));
-        owned = [...ownedTmp, ...owned];
+        const { capacities, sudts, notSimples } = simpleSifter(inputs, sudtType, expander);
 
-        return { owned, unknowns };
+        const orders = capacities.concat(sudts)
+            .map(order => {
+                const { isSudtToCkb, ckbMultiplier, sudtMultiplier } = extract(order);
+                return { order, isSudtToCkb, sudt2ckbRatio: sudtMultiplier.toNumber() / ckbMultiplier.toNumber() };
+            })
+            .sort((a, b) => a.sudt2ckbRatio - b.sudt2ckbRatio);
+
+        const ckb2SudtOrders: I8Cell[] = [];
+        const sudt2ckbOrders: I8Cell[] = [];
+        for (const { order, isSudtToCkb } of orders) {
+            if (isSudtToCkb) {
+                sudt2ckbOrders.push(order);
+            } else {
+                ckb2SudtOrders.push(order);
+            }
+        }
+
+        //Order both cells list by their natural ratio ascending order, so less favorable first
+        ckb2SudtOrders.reverse();
+
+        return {
+            ckb2SudtOrders,
+            sudt2ckbOrders,
+            notOrders: notSimples
+        };
     }
 
     function extract(order: I8Cell) {

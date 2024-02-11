@@ -10,7 +10,7 @@ import { Uint128LE, Uint8 } from "@ckb-lumos/codec/lib/number/uint";
 import { extractDaoDataCompatible } from "@ckb-lumos/common-scripts/lib/dao";
 import { TransactionSkeleton, TransactionSkeletonType, minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
 import {
-    Assets, I8Cell, I8Header, I8Script, addAsset, addCells, capacitiesSifter, createUintBICodec,
+    Assets, I8Cell, I8Header, I8Script, addAsset, addCells, capacitySifter, createUintBICodec,
     daoDeposit, daoRequestWithdrawalFrom, daoRequestWithdrawalWith, daoSifter, daoWithdrawFrom, defaultScript,
     epochSinceCompare, errorUndefinedBlockNumber, headerDeps, isDaoDeposit, logSplit, scriptEq, since
 } from "@ickb/lumos-utils";
@@ -77,15 +77,12 @@ export function ickbSifter(
     }
 
     const ickbLogicExpander = (c: Cell) => (scriptEq(c.cellOutput.lock, ickbLogic) ? ickbLogic : undefined);
-    ({
-        owned: capacities,
-        unknowns
-    } = capacitiesSifter(unknowns, ickbLogicExpander));
+    ({ capacities, notCapacities: unknowns } = capacitySifter(unknowns, ickbLogicExpander));
 
     ({
         deposits: ickbDepositPool,
         withdrawalRequests,
-        unknowns
+        notDaos: unknowns
     } = daoSifter(unknowns, ickbLogicExpander, getHeader));
 
     //Filter owned cells by tx hash of receipts
@@ -110,7 +107,7 @@ export function ickbSifter(
             withdrawalRequests
         },
         ickbDepositPool,
-        unknowns
+        notIckbs: unknowns
     };
 }
 
