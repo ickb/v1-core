@@ -32,13 +32,13 @@ pub fn main() -> Result<(), Error> {
 const CKB_DECIMALS: u64 = 8;
 
 fn validate(index: usize, script: &Script) -> Result<(), Error> {
-    // Validate input.
+    // Validate input
     let in_script = load_cell_lock(index, Source::Input)?;
     let (terminal_lock, sudt_hash, is_sudt_to_ckb, ckb_multiplier, sudt_multiplier) =
         extract_args_data(&script)?;
     let (in_ckb_amount, in_sudt_amount, _, _) = extract_amounts(index, Source::Input, sudt_hash)?;
 
-    // Validate output.
+    // Validate output
     let out_script = load_cell_lock(index, Source::Output)?;
     if out_script.as_slice() != in_script.as_slice()
         && out_script.as_slice() != terminal_lock.as_slice()
@@ -49,22 +49,22 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
     let (out_ckb_amount, out_sudt_amount, script_type, cell_data_len) =
         extract_amounts(index, Source::Output, sudt_hash)?;
 
-    // Output lock is given to UI as address, so the output lock should not use additional cell data.
+    // Output lock is given to UI as address, so the output lock should not use additional cell data
     match (script_type, cell_data_len) {
         (ScriptType::None, 0) => (),
         (ScriptType::SUDT, 16) => (),
         _ => return Err(Error::InvalidInputType),
     };
 
-    // Check that limit order does not lose value.
-    // Note on Overflow: u128 quantities represented with u256, no overflow is possible.
+    // Check that limit order does not lose value
+    // Note on Overflow: u128 quantities represented with u256, no overflow is possible
     if in_ckb_amount * ckb_multiplier + in_sudt_amount * sudt_multiplier
         > out_ckb_amount * ckb_multiplier + out_sudt_amount * sudt_multiplier
     {
         return Err(Error::DecreasingValue);
     }
 
-    // Validate limit order fulfillment while preventing DoS and leaving enough CKB for terminal lock state rent.
+    // Validate limit order fulfillment while preventing DoS and leaving enough CKB for terminal lock state rent
     // SUDT -> CKB
 
     let is_owner_mode = || {
@@ -74,21 +74,21 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
 
     let one_hundred_ckb = U256::from(100 * 10 ^ CKB_DECIMALS); // 100 CKB
     if is_sudt_to_ckb {
-        // Terminal state.
+        // Terminal state
         if out_script.as_slice() == terminal_lock.as_slice() && script_type == ScriptType::None {
             return Ok(());
         }
 
-        // Partially fulfilled.
+        // Partially fulfilled
         if out_script.as_slice() == in_script.as_slice()
             && script_type == ScriptType::SUDT
-            // DoS prevention: 100 CKB is the minimum partial fulfillment.
+            // DoS prevention: 100 CKB is the minimum partial fulfillment
             && in_ckb_amount + one_hundred_ckb  <= out_ckb_amount
         {
             return Ok(());
         }
 
-        // Recovery using owner lock.
+        // Recovery using owner lock
         if out_script.as_slice() == terminal_lock.as_slice() && is_owner_mode() {
             return Ok(());
         }
@@ -96,7 +96,7 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
         return Err(Error::InvalidAction);
     } else {
         // CKB -> SUDT
-        // Terminal state.
+        // Terminal state
         if out_script.as_slice() == terminal_lock.as_slice()
             && script_type == ScriptType::SUDT
             && load_cell_capacity(index, Source::Output)
@@ -105,18 +105,18 @@ fn validate(index: usize, script: &Script) -> Result<(), Error> {
             return Ok(());
         }
 
-        // Partially fulfilled.
+        // Partially fulfilled
         if out_script.as_slice() == in_script.as_slice()
             && script_type == ScriptType::SUDT
-            // DOS prevention: the equivalent of 100 CKB is the minimum partial fulfillment.
-            // Note on Overflow: u128 quantities represented with u256, no overflow is possible.
+            // DOS prevention: the equivalent of 100 CKB is the minimum partial fulfillment
+            // Note on Overflow: u128 quantities represented with u256, no overflow is possible
             && in_sudt_amount * sudt_multiplier + one_hundred_ckb * ckb_multiplier
                 <= out_sudt_amount * sudt_multiplier
         {
             return Ok(());
         }
 
-        // Recovery using owner lock.
+        // Recovery using owner lock
         if out_script.as_slice() == terminal_lock.as_slice() && is_owner_mode() {
             return Ok(());
         }
@@ -152,48 +152,54 @@ fn extract_amounts(
     return Ok((ckb_amount, sudt_amount, script_type, cell_data_len));
 }
 
-#[repr(usize)]
-enum Role {
-    TerminalLockCodeHash = 0,
-    TerminalLockHashType,
-    TerminalLockArgs,
-    SudtHash,
-    IsSudtToCkb,
-    CkbMultiplier,
-    SudtMultiplier,
-}
+// Arg data layout in bytes
+// {
+const TERMINAL_LOCK_CODE_HASH: usize = 32;
+const TERMINAL_LOCK_HASH_TYPE: usize = 1;
+//  const TERMINAL_LOCK_ARGS : usize = ??;
+const SUDT_HASH: usize = 32;
+const IS_SUDT_TO_CKB: usize = 1;
+const CKB_MULTIPLIER: usize = 8;
+const SUDT_MULTIPLIER: usize = 8;
+// }
+
 pub fn extract_args_data(script: &Script) -> Result<(Script, [u8; 32], bool, U256, U256), Error> {
     let args: Bytes = script.args().unpack();
-    let mut lengths: [usize; 7] = [32, 1, 0, 32, 1, 8, 8];
-    let minimum_length: usize = lengths.iter().sum();
+
+    let minimum_length = TERMINAL_LOCK_CODE_HASH
+        + TERMINAL_LOCK_HASH_TYPE
+        + SUDT_HASH
+        + IS_SUDT_TO_CKB
+        + CKB_MULTIPLIER
+        + SUDT_MULTIPLIER;
     if args.len() < minimum_length {
         return Err(Error::ArgsTooShort);
     }
-    lengths[Role::TerminalLockArgs as usize] = args.len() - minimum_length;
+    let terminal_lock_args: usize = args.len() - minimum_length;
 
-    let mut data: [&[u8]; 7] = Default::default();
-    let mut x0: usize = 0;
-    for (index, length) in lengths.iter().enumerate() {
-        let x1 = x0 + length;
-        data[index] = &args[x0..x1];
-        x0 = x1;
-    }
+    //Data splitter
+    let mut raw_data = &args[..];
+    let mut load = |size: usize| {
+        let field_data: &[u8];
+        (field_data, raw_data) = raw_data.split_at(size);
+        return field_data;
+    };
 
     let terminal_lock = ScriptBuilder::default()
         .code_hash(Byte32::new_unchecked(
-            data[Role::TerminalLockCodeHash as usize].to_vec().into(),
+            load(TERMINAL_LOCK_CODE_HASH).to_vec().into(),
         ))
-        .hash_type(data[Role::TerminalLockHashType as usize][0].into())
-        .args(Bytes::from(data[Role::TerminalLockArgs as usize].to_vec()).pack())
+        .hash_type(load(TERMINAL_LOCK_HASH_TYPE)[0].into())
+        .args(Bytes::from(load(terminal_lock_args).to_vec()).pack())
         .build();
 
-    let sudt_hash: [u8; 32] = data[Role::SudtHash as usize].try_into().unwrap();
-    let is_sudt_to_ckb = data[Role::IsSudtToCkb as usize][0] != 0;
+    let sudt_hash: [u8; 32] = load(SUDT_HASH).try_into().unwrap();
+    let is_sudt_to_ckb = load(IS_SUDT_TO_CKB)[0] != 0;
 
-    // Multipliers are only positive numbers, so they are encoded subtracting 1 to avoid the zero value.
-    // Note on Overflow: u64 quantities represented with u256, no overflow is possible.
-    let ckb_multiplier = U256::from(u64_from(data[Role::CkbMultiplier as usize], 0)?) + 1;
-    let sudt_multiplier = U256::from(u64_from(data[Role::SudtMultiplier as usize], 0)?) + 1;
+    // Multipliers are only positive numbers, so they are encoded subtracting 1 to avoid the zero value
+    // Note on Overflow: u64 quantities represented with u256, no overflow is possible
+    let ckb_multiplier = U256::from(u64_from(load(CKB_MULTIPLIER), 0)?) + 1;
+    let sudt_multiplier = U256::from(u64_from(load(SUDT_MULTIPLIER), 0)?) + 1;
 
     Ok((
         terminal_lock,
