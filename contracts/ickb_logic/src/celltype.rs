@@ -34,8 +34,8 @@ pub enum CellType {
 impl Iterator for CellTypeIter {
     type Item = Result<(usize, Source, CellType, bool), Error>;
 
-    // Iterates over the specified sources, returning the index and type of found iCKB cells.
-    // Returns an error in case of preventable iCKB scripts misuse in output cells.
+    // Iterates over the specified sources, returning the index and type of found iCKB cells
+    // Returns an error in case of preventable iCKB scripts misuse in output cells
     fn next(&mut self) -> Option<Self::Item> {
         let err = |e| Some(Err(e));
 
@@ -43,11 +43,11 @@ impl Iterator for CellTypeIter {
             load_cell_lock_hash(self.index, self.source),
             load_cell_type_hash(self.index, self.source),
         ) {
-            // No more cells.
+            // No more cells
             (Err(SysError::IndexOutOfBound), ..) => return None,
-            // Unknown error.
+            // Unknown error
             (Err(e), ..) | (.., Err(e)) => return err(Error::from(e)),
-            // A new cell exists.
+            // A new cell exists
             (Ok(lock_script_hash), Ok(maybe_type_script_hash)) => (
                 self.script_type(lock_script_hash),
                 maybe_type_script_hash.map_or(ScriptType::None, |h| self.script_type(h)),
@@ -100,7 +100,7 @@ enum ScriptType {
 impl CellTypeIter {
     fn script_type(&self, h: [u8; 32]) -> ScriptType {
         if h == self.nervos_dao_script_hash {
-            // This condition checks that's a deposit, not a withdrawal.
+            // This condition checks that's a deposit, not a withdrawal
             if cell_data_is_8_zeroed_bytes(self.index, self.source) {
                 return ScriptType::NervosDaoDeposit;
             } else {
