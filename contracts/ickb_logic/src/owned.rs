@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use crate::error::Error;
 
 struct Data {
-    key: [u8; 32], //tx_hash
+    tx_hash: [u8; 32], // Key for binary search
     owned: u64,
     receipted: u64,
 }
@@ -24,7 +24,7 @@ impl OwnedValidator {
                 return Err(Error::OwnedNotReceipted);
             }
             if d.owned < d.receipted {
-                unspent_receipted.push((d.key, d.receipted - d.owned));
+                unspent_receipted.push((d.tx_hash, d.receipted - d.owned));
             }
         }
 
@@ -42,18 +42,18 @@ impl OwnedValidator {
 
     pub fn add_owned(&mut self, tx_hash: [u8; 32], quantity: u64) -> Result<(), Error> {
         let (position, owned, _) = self.position(tx_hash)?;
-        // Note on Overflow: even locking the total CKB supply in Owned cells can't overflow this counter.
+        // Note on Overflow: even locking the total CKB supply in Owned cells can't overflow this counter
         self.0[position].owned = owned + quantity;
         Ok(())
     }
 
-    fn position(&mut self, key: [u8; 32]) -> Result<(usize, u64, u64), Error> {
-        match self.0.binary_search_by_key(&key, |d: &Data| d.key) {
+    fn position(&mut self, tx_hash: [u8; 32]) -> Result<(usize, u64, u64), Error> {
+        match self.0.binary_search_by_key(&tx_hash, |d: &Data| d.tx_hash) {
             Err(position) => {
                 self.0.insert(
                     position,
                     Data {
-                        key,
+                        tx_hash,
                         owned: 0,
                         receipted: 0,
                     },
