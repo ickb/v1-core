@@ -54,7 +54,7 @@ cd v1-core
 npm link @ickb/lumos-utils@1.0.0
 ```
 
-3. Build and deploy the release version of contracts on devnet:
+3. Build and deploy the release version of contracts on devnet and generate a `config.json`:
 
 ```bash
 npm run deploy release devnet

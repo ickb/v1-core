@@ -3,8 +3,8 @@ import { ckbHash } from "@ckb-lumos/base/lib/utils";
 import { execSync } from "child_process";
 import { readFile, readdir, writeFile } from "fs/promises";
 import {
-    Chain, DeployScriptData, I8Cell, I8OutPoint, addCells, capacitySifter, ckbFundAdapter,
-    createDepGroup, defaultRpcUrl, deploy, fund, getCells, initializeChainAdapter,
+    Chain, DeployScriptData, I8Cell, I8OutPoint, addCells, ckbFundAdapter,
+    createDepGroup, defaultRpcUrl, deploy, fund, genesisDevnetKey, getFeeRate, initializeChainAdapter,
     isChain, scriptNames, secp256k1Blake160, sendTransaction, serializeConfig
 } from "@ickb/lumos-utils";
 import { TransactionSkeleton } from "@ckb-lumos/helpers";
@@ -28,43 +28,18 @@ async function main() {
         scriptData.unshift(await sudtScriptData());
     }
 
-    if (chain !== "devnet") {
-        throw Error("To be implemented...")
+    if (chain === "mainnet") {
+        throw Error("Not yet ready for mainnet...")
     }
 
-    //Genesis devnet account
-    const {
-        lockScript,
-        expander,
-        preSigner,
-        signer
-    } = secp256k1Blake160(
-        "0xd00c06bfd800d27397002dca6fb0993d5ba6399b4238b2f29ee9deb97593d2bc"
-    );
+    const { lockScript, preSigner, signer, getCapacities } = secp256k1Blake160(genesisDevnetKey);
 
     const commit = async (cells: readonly I8Cell[]) => {
-        const { capacities } = capacitySifter(
-            (await getCells({
-                script: lockScript,
-                scriptType: "lock",
-                filter: {
-                    scriptLenRange: ["0x0", "0x1"],
-                    outputDataLenRange: ["0x0", "0x1"],
-                },
-                scriptSearchMode: "exact"
-            })),
-            expander
-        );
-        // const feeRate = await getFeeRate();
-        const feeRate = 1000;
+        const capacities = await getCapacities();
+        const feeRate = await getFeeRate();
         let tx = addCells(TransactionSkeleton(), "append", [], cells);
         const outputs = tx.outputs;
-        tx = fund(tx, ckbFundAdapter(
-            lockScript,
-            feeRate,
-            preSigner,
-            capacities
-        ));
+        tx = fund(tx, ckbFundAdapter(lockScript, feeRate, preSigner, capacities));
         const txHash = await sendTransaction(signer(tx));
         return outputs.map((_, i) => I8OutPoint.from({ txHash, index: BI.from(i).toHexString() })).toArray();
     }
