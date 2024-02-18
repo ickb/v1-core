@@ -114,7 +114,7 @@ export function ickbSifter(
 function receiptOwned(receipts: Cell[]) {
     const txHash2OwnedQuantity = new Map<Hash, number>();
     for (const r of receipts) {
-        const { ownedQuantity, unspent } = ReceiptCodec.unpack(r.data);
+        const { ownedQuantity, unspent } = ReceiptDataCodec.unpack(r.data);
         if (ownedQuantity > 0) {
             txHash2OwnedQuantity.set(r.outPoint!.txHash, ownedQuantity);
         }
@@ -140,8 +140,8 @@ export function ickbRequestWithdrawalWith(
     tipHeader: I8Header,
     maxIckbWithdrawalAmount: BI,
     maxWithdrawalCells: number = Number.POSITIVE_INFINITY,
-    minLock: EpochSinceValue = { length: 16, index: 1, number: 0 },// 1/8 epoch (~ 15 minutes)
-    maxLock: EpochSinceValue = { length: 4, index: 1, number: 0 }// 1/4 epoch (~ 1 hour)
+    minLock?: EpochSinceValue,
+    maxLock?: EpochSinceValue,
 ) {
     return daoRequestWithdrawalWith(
         tx,
@@ -212,7 +212,7 @@ export function ickbSudtFundAdapter(
 
         //Maybe add iCKB receipt cell
         if (ownedCells.length > 0 || unspent.length > 0) {
-            const data = hexify(ReceiptCodec.pack({
+            const data = hexify(ReceiptDataCodec.pack({
                 depositAmount: ickbDeposits.length > 0 ?
                     BI.from(ickbDeposits[0].cellOutput.capacity)
                         .sub(minimalCellCapacityCompatible(ickbDeposits[0]))
@@ -296,7 +296,7 @@ export function ickbDelta(tx: TransactionSkeletonType) {
         //iCKB Receipt
         if (scriptEq(c.cellOutput.type, ickbLogicScript())) {
             const header = (c as I8Cell).cellOutput.type![headerDeps][0];
-            const { depositQuantity, depositAmount } = ReceiptCodec.unpack(c.data);
+            const { depositQuantity, depositAmount } = ReceiptDataCodec.unpack(c.data);
             ickbDelta = ickbDelta.add(ickbReceiptValue(depositQuantity, depositAmount, header));
         }
     }
@@ -329,7 +329,7 @@ const PositiveUint8 = createFixedBytesCodec<number, BIish>(
 
 const Uint48LE = createUintBICodec(6, true);
 
-export type PackableReceipt = {
+export type PackableReceiptData = {
     depositAmount: BI,          //  6 bytes
     depositQuantity: number,    //  1 byte
     ownedQuantity: number,      //  1 byte
@@ -338,7 +338,7 @@ export type PackableReceipt = {
         ownedQuantity: number,  //  1 byte
     }[]
 };
-const newParametricReceiptCodec = (unspentLength: number) => {
+const newParametricReceiptDataCodec = (unspentLength: number) => {
     const unspentCodec = struct(
         {
             txHash: Byte32,
@@ -361,21 +361,21 @@ const newParametricReceiptCodec = (unspentLength: number) => {
 }
 
 const size = 100;
-const receiptCodecs = Object.freeze(Array.from({ length: size }, (_, i) => newParametricReceiptCodec(i)));
-export const ReceiptCodec = createBytesCodec<PackableReceipt>({
+const receiptDataCodecs = Object.freeze(Array.from({ length: size }, (_, i) => newParametricReceiptDataCodec(i)));
+export const ReceiptDataCodec = createBytesCodec<PackableReceiptData>({
     pack: (packable) => {
         const n = packable.unspent.length;
-        return (n < size ? receiptCodecs[n] : newParametricReceiptCodec(n)).pack(packable);
+        return (n < size ? receiptDataCodecs[n] : newParametricReceiptDataCodec(n)).pack(packable);
     },
     unpack: (packed) => {
-        const n = (packed.length - receiptCodecs[0].byteLength) / 33;
-        return (n < size ? receiptCodecs[n] : newParametricReceiptCodec(n)).unpack(packed);
+        const n = (packed.length - receiptDataCodecs[0].byteLength) / 33;
+        return (n < size ? receiptDataCodecs[n] : newParametricReceiptDataCodec(n)).unpack(packed);
     }
 });
 
 export const ICKB_SOFT_CAP_PER_DEPOSIT = parseUnit("100000", "ckb");
 export function ickbDepositValue(ckbUnoccupiedCapacity: BI, header: I8Header) {
-    let ickbAmount = ckb2Ickb(ckbUnoccupiedCapacity, header);
+    let ickbAmount = ckb2Ickb(ckbUnoccupiedCapacity, header, false);
     if (ICKB_SOFT_CAP_PER_DEPOSIT.lt(ickbAmount)) {
         // Apply a 10% discount for the amount exceeding the soft iCKB cap per deposit.
         ickbAmount = ickbAmount.sub(ickbAmount.sub(ICKB_SOFT_CAP_PER_DEPOSIT).div(10));
@@ -389,25 +389,26 @@ export function ickbReceiptValue(receiptCount: BIish, receiptAmount: BI, header:
 }
 
 export function ckbSoftCapPerDeposit(header: I8Header) {
-    return ckb2Ickb(ICKB_SOFT_CAP_PER_DEPOSIT, header);
+    return ickb2Ckb(ICKB_SOFT_CAP_PER_DEPOSIT, header);
 }
 
-export function ckb2Ickb(ckbAmount: BI, header: I8Header) {
-    const { ckbMultiplier, sudtMultiplier } = ickbExchangeRatio(header);
+export function ckb2Ickb(ckbAmount: BI, header: I8Header, accountDepositCapacity = true) {
+    const { ckbMultiplier, sudtMultiplier } = ickbExchangeRatio(header, accountDepositCapacity);
     return ckbAmount.mul(ckbMultiplier).div(sudtMultiplier);
 }
 
-export function ickb2Ckb(sudtAmount: BI, header: I8Header) {
-    const { ckbMultiplier, sudtMultiplier } = ickbExchangeRatio(header);
-    return sudtAmount.mul(sudtMultiplier).div(ckbMultiplier).add(1);
+export function ickb2Ckb(sudtAmount: BI, header: I8Header, accountDepositCapacity = true) {
+    const { ckbMultiplier, sudtMultiplier } = ickbExchangeRatio(header, accountDepositCapacity);
+    return sudtAmount.mul(sudtMultiplier).div(ckbMultiplier);
 }
 
 const AR_0 = BI.from("10000000000000000");
-export function ickbExchangeRatio(header: I8Header) {
+const depositCapacityMultiplier = parseUnit("82", "ckb").mul(AR_0).div(ICKB_SOFT_CAP_PER_DEPOSIT);
+export function ickbExchangeRatio(header: I8Header, accountDepositCapacity = true) {
     const daoData = extractDaoDataCompatible(header.dao);
     const AR_m = daoData["ar"];
     return {
         ckbMultiplier: AR_0,
-        sudtMultiplier: AR_m
+        sudtMultiplier: accountDepositCapacity ? AR_m.add(depositCapacityMultiplier) : AR_m
     }
 }
