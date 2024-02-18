@@ -4,14 +4,25 @@ import { hexify } from "@ckb-lumos/codec/lib/bytes";
 import { struct } from "@ckb-lumos/codec/lib/molecule";
 import { Uint128LE, Uint64LE } from "@ckb-lumos/codec/lib/number";
 import { BI, BIish, parseUnit } from "@ckb-lumos/bi";
-import { TransactionSkeletonType } from "@ckb-lumos/helpers";
+import { TransactionSkeleton, TransactionSkeletonType } from "@ckb-lumos/helpers";
 import { Cell, HashType, HexString } from "@ckb-lumos/base";
 import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
 import {
-    BooleanCodec, I8Cell, I8Script, addCells, defaultScript, i8ScriptPadding, scriptEq, simpleSifter
+    Assets, BooleanCodec, I8Cell, I8Script, addAssetsFunds, addCells,
+    defaultScript, i8ScriptPadding, scriptEq, simpleSifter
 } from "@ickb/lumos-utils";
 import { ickbSudtType } from "./ickb_logic";
 
+export type LimitOrder = PackableOrderArgs & {
+    cell: I8Cell,
+    terminalLock: I8Script,
+    sudtAmount: BI,
+    ckbAmount: BI
+};
+
+export const errorCkbAllowanceTooLow = "Not enough ckb allowance to partially fulfill a limit order";
+export const errorSudtAllowanceTooLow = "Not enough SUDT allowance to partially fulfill a limit order";
+export const errorTerminalLockNotFound = "Not found an input cell with terminal lock in the transaction";
 export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
     if (sudtType == i8ScriptPadding) {
         sudtType = ickbSudtType();
@@ -19,92 +30,110 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
     const orderLock = limitOrderLock();
     const sudtHash = computeScriptHash(sudtType);
 
-    function create(tx: TransactionSkeletonType, data: PackableOrder & { ckbAmount?: BI, sudtAmount?: BI }) {
-        const c = I8Cell.from({
-            lock: I8Script.from({ ...orderLock, args: hexify(LimitOrderCodec.pack(data)) }),
+    function create(tx: TransactionSkeletonType, o: PackableOrderArgs & { ckbAmount?: BI, sudtAmount?: BI }) {
+        let c = I8Cell.from({
+            lock: I8Script.from({ ...orderLock, args: hexify(LimitOrderArgsCodec.pack(o)) }),
             type: sudtType,
-            capacity: (data.ckbAmount ?? BI.from(0)).toHexString(),
-            data: hexify(Uint128LE.pack((data.sudtAmount ?? 0)))
+            data: hexify(Uint128LE.pack((o.sudtAmount ?? 0)))
         });
+
+        if (o.ckbAmount) {
+            c = I8Cell.from({
+                ...c,
+                capacity: BI.from(c.cellOutput.capacity).add(o.ckbAmount).toHexString(),
+            });
+        }
 
         return addCells(tx, "append", [], [c]);
     }
 
     function fulfill(
         tx: TransactionSkeletonType,
-        order: I8Cell,
+        o: LimitOrder,
         ckbAllowance: BI | undefined,
         sudtAllowance: BI | undefined
     ) {
-        const o = extract(order);
+        const { fulfillment } = satisfy(o, ckbAllowance, sudtAllowance);
+        return addCells(tx, "matched", [o.cell], [fulfillment]);
+    }
 
-        let cell = I8Cell.from({
+    function satisfy(
+        o: LimitOrder,
+        ckbAllowance: BI | undefined,
+        sudtAllowance: BI | undefined
+    ) {
+        let fulfillment = I8Cell.from({
             lock: o.terminalLock,
             type: sudtType,
             data: "0x00000000000000000000000000000000",
         });
 
         // Try to fulfill the order completely
+        let isComplete = true;
         if (o.isSudtToCkb) {
             const outSudt = BI.from(0);
             const outCkb = calculate(o.sudtMultiplier, o.ckbMultiplier, o.sudtAmount, o.ckbAmount, outSudt);
 
-            cell = I8Cell.from({
-                ...cell,
+            fulfillment = I8Cell.from({
+                ...fulfillment,
                 capacity: outCkb.toHexString(),
                 type: undefined,
                 data: "0x"
             });
             if (!ckbAllowance || outCkb.sub(o.ckbAmount).lte(ckbAllowance)) {
-                return addCells(tx, "matched", [order], [cell]);
+                return { fulfillment, isComplete };
             }
         } else {
-            const outCkb = BI.from(cell.cellOutput.capacity);
+            const outCkb = BI.from(fulfillment.cellOutput.capacity);
             const outSudt = calculate(o.ckbMultiplier, o.sudtMultiplier, o.ckbAmount, o.sudtAmount, outCkb);
 
-            cell = I8Cell.from({
-                ...cell,
+            fulfillment = I8Cell.from({
+                ...fulfillment,
                 data: hexify(Uint128LE.pack(outSudt))
             });
             if (!sudtAllowance || outSudt.sub(o.sudtAmount).lte(sudtAllowance)) {
-                return addCells(tx, "matched", [order], [cell]);
+                return { fulfillment, isComplete };
             }
         }
 
         // Allowance limits the order fulfillment, so the output cell is a still a limit order
+        isComplete = false;
         let outCkb: BI;
         let outSudt: BI;
         if (o.isSudtToCkb) {
             // DoS prevention: 100 CKB is the minimum partial fulfillment.
             if (ckbAllowance!.lt(parseUnit("100", "ckb"))) {
-                throw Error("Not enough ckb allowance");
+                throw Error(errorCkbAllowanceTooLow);
             }
             outCkb = o.ckbAmount.add(ckbAllowance!)
             outSudt = calculate(o.ckbMultiplier, o.sudtMultiplier, o.ckbAmount, o.sudtAmount, outCkb);
         } else {
             // DOS prevention: the SUDT equivalent of 100 CKB is the minimum partial fulfillment.
             if (sudtAllowance!.mul(o.sudtMultiplier).lt(parseUnit("100", "ckb").mul(o.ckbMultiplier))) {
-                throw Error("Not enough sudt allowance");
+                throw Error(errorSudtAllowanceTooLow);
             }
             outSudt = o.sudtAmount.add(sudtAllowance!);
             outCkb = calculate(o.sudtMultiplier, o.ckbMultiplier, o.sudtAmount, o.ckbAmount, outSudt);
         }
 
-        cell = I8Cell.from({
-            lock: order.cellOutput.lock,
+        fulfillment = I8Cell.from({
+            lock: o.cell.cellOutput.lock,
+            type: sudtType,
             capacity: outCkb.toHexString(),
             data: hexify(Uint128LE.pack(outSudt))
         });
-        return addCells(tx, "matched", [order], [cell]);
+        return { fulfillment, isComplete };
     }
 
-    function cancel(tx: TransactionSkeletonType, order: I8Cell) {
-        const data = extract(order);
-        const c = I8Cell.from({ ...order, lock: data.terminalLock });
-        return addCells(tx, "matched", [order], [c]);
+    function cancel(tx: TransactionSkeletonType, o: LimitOrder, validate: boolean = true) {
+        const cell = I8Cell.from({ ...o.cell, lock: o.terminalLock });
+        if (validate && !tx.inputs.some(c => scriptEq(c.cellOutput.lock, o.terminalLock))) {
+            throw Error(errorTerminalLockNotFound);
+        }
+        return addCells(tx, "matched", [o.cell], [cell]);
     }
 
-    function expander(order: Cell) {
+    function _lockExpander(order: Cell) {
         const { lock, type } = order.cellOutput;
         const i8lock = I8Script.from({ ...orderLock, args: lock.args });
 
@@ -114,7 +143,7 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
         }
 
         //Validate sudt type
-        const o = LimitOrderCodec.unpack(lock.args);
+        const o = LimitOrderArgsCodec.unpack(lock.args);
         if ((type && !scriptEq(type, sudtType)) || o.sudtHash !== sudtHash) {
             return undefined;
         }
@@ -122,28 +151,41 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
         return i8lock;
     }
 
-    function sifter(inputs: readonly Cell[]) {
-        const { capacities, sudts, notSimples } = simpleSifter(inputs, sudtType, expander);
+    function sifter(inputs: readonly Cell[], accountLock?: I8Script, sort?: "asc" | "desc") {
+        const { capacities, sudts, notSimples } = simpleSifter(inputs, sudtType, _lockExpander);
 
-        const orders = capacities.concat(sudts)
-            .map(order => {
-                const { isSudtToCkb, ckbMultiplier, sudtMultiplier } = extract(order);
-                return { order, isSudtToCkb, sudt2ckbRatio: sudtMultiplier.toNumber() / ckbMultiplier.toNumber() };
-            })
-            .sort((a, b) => a.sudt2ckbRatio - b.sudt2ckbRatio);
+        let orders: LimitOrder[] = capacities.concat(sudts).map(cell => {
+            const { lock, type, capacity } = cell.cellOutput;
 
-        const ckb2SudtOrders: I8Cell[] = [];
-        const sudt2ckbOrders: I8Cell[] = [];
-        for (const { order, isSudtToCkb } of orders) {
-            if (isSudtToCkb) {
+            //Validation is already done in expander
+            const o = LimitOrderArgsCodec.unpack(lock.args);
+            return {
+                cell,
+                ...o,
+                terminalLock: I8Script.from({ ...i8ScriptPadding, ...o.terminalLock }),
+                sudtAmount: type ? Uint128LE.unpack(cell.data) : BI.from(0),
+                ckbAmount: BI.from(capacity)
+            };
+        });
+
+        if (accountLock) {
+            orders = orders.filter(o => scriptEq(o.terminalLock, accountLock));
+        }
+
+        const ckb2SudtOrders: typeof orders = [];
+        const sudt2ckbOrders: typeof orders = [];
+        for (const order of orders) {
+            if (order.isSudtToCkb) {
                 sudt2ckbOrders.push(order);
             } else {
                 ckb2SudtOrders.push(order);
             }
         }
 
-        //Order both cells list by their natural ratio ascending order, so less favorable first
-        ckb2SudtOrders.reverse();
+        if (sort) {
+            sudt2ckbOrders.sort(sort === "asc" ? sudt2CkbRatioCompare : (o0, o1) => sudt2CkbRatioCompare(o1, o0));
+            ckb2SudtOrders.sort(sort === "asc" ? (o0, o1) => sudt2CkbRatioCompare(o1, o0) : sudt2CkbRatioCompare);
+        }
 
         return {
             ckb2SudtOrders,
@@ -152,29 +194,50 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
         };
     }
 
-    function extract(order: I8Cell) {
-        const { lock, type, capacity } = order.cellOutput;
-
-        //Validation is already done in expander and sifter
-        const o = LimitOrderCodec.unpack(lock.args);
-        return {
-            ...o,
-            terminalLock: I8Script.from({ ...i8ScriptPadding, ...o.terminalLock }),
-            sudtAmount: type ? Uint128LE.unpack(order.data) : BI.from(0),
-            ckbAmount: BI.from(capacity)
-        };
-    }
-
     function isValid(order: Cell) {
-        return !!expander(order);
+        return !!_lockExpander(order);
     }
 
     return {
-        create, fulfill, cancel, extract, expander, sifter, isValid,
-        limitOrderLock: orderLock,
-        sudtType,
-        sudtHash
+        sudtType, sudtHash, limitOrderLock: orderLock,
+        create, fulfill, cancel,
+        satisfy, sifter, isValid
     }
+}
+
+export function sudt2CkbRatioCompare(
+    o0: LimitOrder,
+    o1: LimitOrder
+): number {
+    if (o0.ckbMultiplier.eq(o1.ckbMultiplier)) {
+        return o0.sudtMultiplier.sub(o1.sudtMultiplier).toNumber();
+    }
+
+    if (o0.sudtMultiplier.eq(o1.sudtMultiplier)) {
+        return o1.ckbMultiplier.sub(o0.ckbMultiplier).toNumber();
+    }
+
+    // Idea: o0.Sudt2CkbRatio - o1.Sudt2CkbRatio
+    // ~ o0.sudtMultiplier / o0.ckbMultiplier - o1.sudtMultiplier / o1.ckbMultiplier
+    // order equivalent to:
+    // ~ o0.sudtMultiplier * o1.ckbMultiplier - o1.sudtMultiplier * o0.ckbMultiplier 
+    return o0.sudtMultiplier.mul(o1.ckbMultiplier)
+        .sub(o1.sudtMultiplier.mul(o0.ckbMultiplier))
+        .toNumber();
+}
+
+export function limitOrderFundAdapter(
+    assets: Assets,
+    ckb2SudtOrders: readonly LimitOrder[],
+    sudt2ckbOrders: readonly LimitOrder[],
+): Assets {
+    const unavailableFunds = [
+        TransactionSkeleton()
+            .update("inputs", i => i
+                .push(...ckb2SudtOrders.map(c => c.cell))
+                .push(...sudt2ckbOrders.map(c => c.cell)))
+    ];
+    return addAssetsFunds(assets, undefined, unavailableFunds)
 }
 
 export function limitOrderLock() {
@@ -201,7 +264,7 @@ const PositiveUint64LE = createFixedBytesCodec<BI, BIish>(
     },
 );
 
-export type PackableOrder = {
+export type PackableOrderArgs = {
     terminalLock: {
         codeHash: HexString, // 32 bytes
         hashType: HashType,  // 1 byte
@@ -213,7 +276,7 @@ export type PackableOrder = {
     sudtMultiplier: BI,      // 8 bytes
 }
 
-const newParametricLimitOrderCodec = (argsLength: number) => {
+const newParametricOrderArgsCodec = (argsLength: number) => {
     const ParametricScriptCodec = struct(
         {
             codeHash: Byte32,
@@ -236,14 +299,14 @@ const newParametricLimitOrderCodec = (argsLength: number) => {
 }
 
 const size = 100;
-const limitOrderCodecs = Object.freeze(Array.from({ length: size }, (_, i) => newParametricLimitOrderCodec(i)));
-export const LimitOrderCodec = createBytesCodec<PackableOrder>({
+const limitOrderArgsCodecs = Object.freeze(Array.from({ length: size }, (_, i) => newParametricOrderArgsCodec(i)));
+export const LimitOrderArgsCodec = createBytesCodec<PackableOrderArgs>({
     pack: (packable) => {
         const n = (packable.terminalLock.args.length - 2) / 2;
-        return (n < size ? limitOrderCodecs[n] : newParametricLimitOrderCodec(n)).pack(packable);
+        return (n < size ? limitOrderArgsCodecs[n] : newParametricOrderArgsCodec(n)).pack(packable);
     },
     unpack: (packed) => {
-        const n = packed.length - limitOrderCodecs[0].byteLength;
-        return (n < size ? limitOrderCodecs[n] : newParametricLimitOrderCodec(n)).unpack(packed);
+        const n = packed.length - limitOrderArgsCodecs[0].byteLength;
+        return (n < size ? limitOrderArgsCodecs[n] : newParametricOrderArgsCodec(n)).unpack(packed);
     }
 });
