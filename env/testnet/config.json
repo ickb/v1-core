@@ -1,0 +1,61 @@
+{
+  "PREFIX": "ckt",
+  "SCRIPTS": {
+    "SECP256K1_BLAKE160": {
+      "TX_HASH": "0x59f2127e62dcbb7f7c0dcc77cbc9fbe7d7295f138f44599e2387ffddda141482",
+      "INDEX": "0x0",
+      "DEP_TYPE": "depGroup",
+      "CODE_HASH": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+      "HASH_TYPE": "type"
+    },
+    "SECP256K1_BLAKE160_MULTISIG": {
+      "TX_HASH": "0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37",
+      "INDEX": "0x1",
+      "DEP_TYPE": "depGroup",
+      "CODE_HASH": "0x5c5069eb0857efc65e1bca0c07df34c31663b3622fd3876c876320fc9634e2a8",
+      "HASH_TYPE": "type"
+    },
+    "DAO": {
+      "TX_HASH": "0x59f2127e62dcbb7f7c0dcc77cbc9fbe7d7295f138f44599e2387ffddda141482",
+      "INDEX": "0x0",
+      "DEP_TYPE": "depGroup",
+      "CODE_HASH": "0x82d76d1b75fe2fd9a27dfbaa65a039221a380d76c926f378d3f81cf3e7e13f2e",
+      "HASH_TYPE": "type"
+    },
+    "SUDT": {
+      "TX_HASH": "0x59f2127e62dcbb7f7c0dcc77cbc9fbe7d7295f138f44599e2387ffddda141482",
+      "INDEX": "0x0",
+      "DEP_TYPE": "depGroup",
+      "CODE_HASH": "0xc5e5dcf215925f7ef4dfaf5f4b4f105bc321c02776d6e7d52a1db3fcd9d011a4",
+      "HASH_TYPE": "type"
+    },
+    "ANYONE_CAN_PAY": {
+      "TX_HASH": "0xec26b0f85ed839ece5f11c4c4e837ec359f5adc4420410f6453b1f6b60fb96a6",
+      "INDEX": "0x0",
+      "DEP_TYPE": "depGroup",
+      "CODE_HASH": "0x3419a1c09eb2567f6552ee7a8ecffd64155cffe0f1796e6e61ec088d740c1356",
+      "HASH_TYPE": "type"
+    },
+    "OMNILOCK": {
+      "TX_HASH": "0x3d4296df1bd2cc2bd3f483f61ab7ebeac462a2f336f2b944168fe6ba5d81c014",
+      "INDEX": "0x0",
+      "DEP_TYPE": "code",
+      "CODE_HASH": "0xf329effd1c475a2978453c8600e1eaf0bc2087ee093c3ee64cc96ec6847752cb",
+      "HASH_TYPE": "type"
+    },
+    "ICKB_LOGIC": {
+      "TX_HASH": "0x59f2127e62dcbb7f7c0dcc77cbc9fbe7d7295f138f44599e2387ffddda141482",
+      "INDEX": "0x0",
+      "DEP_TYPE": "depGroup",
+      "CODE_HASH": "0x5dfc0c810c5f55b493d5323d6cc00d53012152bc9452f637a3a858ccfc16b94c",
+      "HASH_TYPE": "data1"
+    },
+    "LIMIT_ORDER": {
+      "TX_HASH": "0x59f2127e62dcbb7f7c0dcc77cbc9fbe7d7295f138f44599e2387ffddda141482",
+      "INDEX": "0x0",
+      "DEP_TYPE": "depGroup",
+      "CODE_HASH": "0x2fc4fa594b82577996ba550e219e3ff1540e9d74d339c3828bceb7445a52f116",
+      "HASH_TYPE": "data1"
+    }
+  }
+}

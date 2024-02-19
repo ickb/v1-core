@@ -1,0 +1,3 @@
+mainnet/.env
+testnet/.env
+devnet/config.json

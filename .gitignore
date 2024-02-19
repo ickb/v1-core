@@ -1,4 +1,4 @@
-config.json
+src/experiments.ts
 node_modules/*
 lib/*
 

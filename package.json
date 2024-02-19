@@ -6,7 +6,8 @@
   "types": "lib/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "deploy": "ts-node src/deploy.ts"
+    "deploy": "node -r ts-node/register --env-file=env/${npm_config_chain}/.env src/deploy.ts",
+    "experiments": "node -r ts-node/register --env-file=env/${npm_config_chain}/.env src/experiments.ts"
   },
   "keywords": [],
   "author": "",

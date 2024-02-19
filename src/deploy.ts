@@ -4,56 +4,58 @@ import { execSync } from "child_process";
 import { readFile, readdir, writeFile } from "fs/promises";
 import {
     Chain, DeployScriptData, I8Cell, I8OutPoint, addCells, ckbFundAdapter,
-    createDepGroup, defaultRpcUrl, deploy, fund, genesisDevnetKey, getFeeRate, initializeChainAdapter,
-    isChain, scriptNames, secp256k1Blake160, sendTransaction, serializeConfig
+    createDepGroup, defaultRpcUrl, deploy, fund, getFeeRate, initializeChainAdapter,
+    isChain, secp256k1Blake160, sendTransaction, serializeConfig
 } from "@ickb/lumos-utils";
 import { TransactionSkeleton } from "@ckb-lumos/helpers";
 import { BI } from "@ckb-lumos/bi";
 
 async function main() {
-    const args = process.argv.slice(2);
-    const [buildType, chain, rpcUrl, clientType] = args;
-
-    if (args.length < 2 || args.length > 4
-        || !isBuildType(buildType)
-        || !isChain(chain)
-        || !(clientType in clientType2IsLightClient)) {
-        throw Error("Invalid command line arguments " + args.join(" "));
+    const { CHAIN, BUILD_TYPE, RPC_URL, CLIENT_TYPE, FUNDING_PRIVATE_KEY } = process.env;
+    if (!isChain(CHAIN)) {
+        throw Error("Invalid env CHAIN: " + CHAIN);
     }
-
-    await initializeChainAdapter(chain, undefined, rpcUrl, clientType2IsLightClient[clientType]);
-
-    const scriptData = await ickbScriptData(buildType, chain);
-    if (chain === "devnet") {
-        scriptData.unshift(await sudtScriptData());
-    }
-
-    if (chain === "mainnet") {
+    if (CHAIN === "mainnet") {
         throw Error("Not yet ready for mainnet...")
     }
-
-    const { lockScript, preSigner, signer, getCapacities } = secp256k1Blake160(genesisDevnetKey);
+    if (!isBuildType(BUILD_TYPE)) {
+        throw Error("Invalid env BUILD_TYPE: " + BUILD_TYPE);
+    }
+    if (!FUNDING_PRIVATE_KEY) {
+        throw Error("Empty env FUNDING_PRIVATE_KEY")
+    }
+    await initializeChainAdapter(CHAIN, undefined, RPC_URL, CLIENT_TYPE === "light" ? true : undefined);
+    const { lockScript, preSigner, signer, getCapacities } = secp256k1Blake160(FUNDING_PRIVATE_KEY);
 
     const commit = async (cells: readonly I8Cell[]) => {
         const capacities = await getCapacities();
         const feeRate = await getFeeRate();
         let tx = addCells(TransactionSkeleton(), "append", [], cells);
-        const outputs = tx.outputs;
         tx = fund(tx, ckbFundAdapter(lockScript, feeRate, preSigner, capacities));
         const txHash = await sendTransaction(signer(tx));
-        return outputs.map((_, i) => I8OutPoint.from({ txHash, index: BI.from(i).toHexString() })).toArray();
+        return cells.map((c, i) => {
+            if (tx.outputs.get(i) !== c) {
+                throw Error("Unexpected cell position mismatch")
+            }
+            return I8OutPoint.from({
+                txHash,
+                index: BI.from(i).toHexString()
+            });
+        });
     }
 
     console.log("Deploying iCKB contracts...");
+    const scriptData = await ickbScriptData(BUILD_TYPE, CHAIN);
+    if (CHAIN === "devnet") {
+        scriptData.unshift(await sudtScriptData());
+    }
     let config = await deploy(scriptData, commit);
-    console.log("Generated config:");
-    console.log(serializeConfig(config));
-    console.log();
 
     console.log("Creating iCKB contracts depGroup...");
-    config = await createDepGroup(scriptNames(), commit);
-    await writeFile(`config.json`, serializeConfig(config));
-    console.log("Generated config:");
+    config = await createDepGroup(["SECP256K1_BLAKE160", "DAO", "SUDT", "ICKB_LOGIC", "LIMIT_ORDER"], commit);
+    console.log();
+    await writeFile(`env/${CHAIN}/config.json`, serializeConfig(config));
+    console.log(`All done, env/${CHAIN}/config.json.json now contains the following config:`);
     console.log(serializeConfig(config));
     console.log();
 }
@@ -82,15 +84,9 @@ const buildType2Flag = {
 
 type BuildType = keyof typeof buildType2Flag;
 
-function isBuildType(x: string): x is BuildType {
-    return buildType2Flag.hasOwnProperty(x);
+function isBuildType(x: string | undefined): x is BuildType {
+    return x === undefined ? false : buildType2Flag.hasOwnProperty(x);
 }
-
-const clientType2IsLightClient: { [id: string]: boolean } = {
-    "light": true,
-    "full": false,
-    undefined: false
-};
 
 async function sudtScriptData() {
     const rpc = new RPC(defaultRpcUrl("mainnet"), { timeout: 10000 });
