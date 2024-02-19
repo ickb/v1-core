@@ -1,14 +1,16 @@
 {
   "name": "@ickb/v1-core",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "deploy": "node -r ts-node/register --env-file=env/${npm_config_chain}/.env src/deploy.ts",
-    "experiments": "node -r ts-node/register --env-file=env/${npm_config_chain}/.env src/experiments.ts"
+    "deploy": "node -r ts-node/register --env-file=env/${npm_config_chain}/.env src/deploy.ts"
   },
+  "files": [
+    "/lib"
+  ],
   "keywords": [],
   "author": "",
   "license": "MIT",
