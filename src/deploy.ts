@@ -8,10 +8,18 @@ import {
     isChain, secp256k1Blake160, sendTransaction, serializeConfig
 } from "@ickb/lumos-utils";
 import { TransactionSkeleton } from "@ckb-lumos/helpers";
-import { BI } from "@ckb-lumos/bi";
+import { BI, parseUnit } from "@ckb-lumos/bi";
 
 async function main() {
-    const { CHAIN, BUILD_TYPE, RPC_URL, CLIENT_TYPE, FUNDING_PRIVATE_KEY } = process.env;
+    const {
+        CHAIN,
+        BUILD_TYPE,
+        RPC_URL,
+        CLIENT_TYPE,
+        DEPLOY_PRIVATE_KEY,
+        BOT_PRIVATE_KEY,
+        INTERFACE_PRIVATE_KEY
+    } = process.env;
     if (!isChain(CHAIN)) {
         throw Error("Invalid env CHAIN: " + CHAIN);
     }
@@ -21,11 +29,24 @@ async function main() {
     if (!isBuildType(BUILD_TYPE)) {
         throw Error("Invalid env BUILD_TYPE: " + BUILD_TYPE);
     }
-    if (!FUNDING_PRIVATE_KEY) {
-        throw Error("Empty env FUNDING_PRIVATE_KEY")
+    if (!DEPLOY_PRIVATE_KEY) {
+        throw Error("Empty env DEPLOY_PRIVATE_KEY")
     }
     await initializeChainAdapter(CHAIN, undefined, RPC_URL, CLIENT_TYPE === "light" ? true : undefined);
-    const { lockScript, preSigner, signer, getCapacities } = secp256k1Blake160(FUNDING_PRIVATE_KEY);
+    const { lockScript, preSigner, signer, getCapacities, transfer } = secp256k1Blake160(DEPLOY_PRIVATE_KEY);
+
+    if (CHAIN === "devnet" && BOT_PRIVATE_KEY) {
+        console.log("Funding fulfillment bot");
+        const botAccount = secp256k1Blake160(BOT_PRIVATE_KEY);
+        const txHash = await transfer(botAccount.lockScript, parseUnit("1000000", "ckb"));
+        console.log(txHash);
+    }
+    if (CHAIN === "devnet" && INTERFACE_PRIVATE_KEY) {
+        console.log("Funding limit order creator");
+        const interfaceAccount = secp256k1Blake160(INTERFACE_PRIVATE_KEY);
+        const txHash = await transfer(interfaceAccount.lockScript, parseUnit("10000000", "ckb"));
+        console.log(txHash);
+    }
 
     const commit = async (cells: readonly I8Cell[]) => {
         const capacities = await getCapacities();

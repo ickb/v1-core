@@ -25,7 +25,13 @@ npm i
 ```
 CHAIN=testnet
 BUILD_TYPE=release
-FUNDING_PRIVATE_KEY=0x-YOUR-SECP256K1-BLAKE160-PRIVATE-KEY
+DEPLOY_PRIVATE_KEY=0x-YOUR-SECP256K1-BLAKE160-PRIVATE-KEY
+```
+
+Optionally the property `RPC_URL` can also be specified:
+
+```
+RPC_URL=http://127.0.0.1:8114/
 ```
 
 5. Deploy the contracts:
