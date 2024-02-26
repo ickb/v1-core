@@ -3,7 +3,7 @@ import { createBytesCodec, createFixedBytesCodec } from "@ckb-lumos/codec";
 import { hexify } from "@ckb-lumos/codec/lib/bytes";
 import { struct } from "@ckb-lumos/codec/lib/molecule";
 import { Uint128LE, Uint64LE, Uint8 } from "@ckb-lumos/codec/lib/number";
-import { BI, BIish, parseUnit } from "@ckb-lumos/bi";
+import { BI, BIish } from "@ckb-lumos/bi";
 import { TransactionSkeleton, TransactionSkeletonType } from "@ckb-lumos/helpers";
 import { Cell, HashType, HexString } from "@ckb-lumos/base";
 import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
@@ -16,6 +16,7 @@ import { ickbSudtType } from "./ickb_logic";
 export type LimitOrder = PackableOrderArgs & {
     cell: I8Cell,
     terminalLock: I8Script,
+    minFulfillment: BI,
     sudtAmount: BI,
     ckbAmount: BI
 };
@@ -104,15 +105,15 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
         let outCkb: BI;
         let outSudt: BI;
         if (o.isSudtToCkb) {
-            // DoS prevention: 100 CKB is the minimum partial fulfillment.
-            if (ckbAllowance!.lt(parseUnit("100", "ckb"))) {
+            // DoS prevention: o.minFulfillment CKB is the minimum partial fulfillment.
+            if (ckbAllowance!.lt(o.minFulfillment)) {
                 throw Error(errorCkbAllowanceTooLow);
             }
             outCkb = o.ckbAmount.add(ckbAllowance!)
             outSudt = calculate(o.ckbMultiplier, o.sudtMultiplier, o.ckbAmount, o.sudtAmount, outCkb);
         } else {
-            // DOS prevention: the SUDT equivalent of 100 CKB is the minimum partial fulfillment.
-            if (sudtAllowance!.mul(o.sudtMultiplier).lt(parseUnit("100", "ckb").mul(o.ckbMultiplier))) {
+            // DOS prevention: the SUDT equivalent of o.minFulfillment CKB is the minimum partial fulfillment.
+            if (sudtAllowance!.mul(o.sudtMultiplier).lt(o.minFulfillment.mul(o.ckbMultiplier))) {
                 throw Error(errorSudtAllowanceTooLow);
             }
             outSudt = o.sudtAmount.add(sudtAllowance!);
@@ -146,9 +147,8 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
         }
 
         try {
-            const o = LimitOrderArgsCodec.unpack(lock.args);
-
             //Validate sudt type
+            const o = LimitOrderArgsCodec.unpack(lock.args);
             if ((type && !scriptEq(type, sudtType)) || o.sudtHash !== sudtHash) {
                 return undefined;
             }
@@ -163,7 +163,12 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
         return i8lock;
     }
 
-    function sifter(inputs: readonly Cell[], accountLock?: I8Script, sort?: "asc" | "desc") {
+    function sifter(
+        inputs: readonly Cell[],
+        accountLock?: I8Script,
+        sort?: "asc" | "desc",
+        maxMinFulfillment?: BI,
+    ) {
         const { capacities, sudts, notSimples } = simpleSifter(inputs, sudtType, _lockExpander);
 
         let orders: LimitOrder[] = capacities.concat(sudts).map(cell => {
@@ -175,6 +180,7 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
                 cell,
                 ...o,
                 terminalLock: I8Script.from({ ...i8ScriptPadding, ...o.terminalLock }),
+                minFulfillment: BI.from(1).shl(o.logMinFulfillment),
                 sudtAmount: type ? Uint128LE.unpack(cell.data) : BI.from(0),
                 ckbAmount: BI.from(capacity)
             };
@@ -182,6 +188,10 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
 
         if (accountLock) {
             orders = orders.filter(o => scriptEq(o.terminalLock, accountLock));
+        }
+
+        if (maxMinFulfillment) {
+            orders = orders.filter(o => o.minFulfillment.lte(maxMinFulfillment));
         }
 
         const ckb2SudtOrders: typeof orders = [];
@@ -277,16 +287,17 @@ const PositiveUint64LE = createFixedBytesCodec<BI, BIish>(
 );
 
 export type PackableOrderArgs = {
-    revision: number,         // 1 byte
+    revision: number,           // 1 byte
     terminalLock: {
-        codeHash: HexString, // 32 bytes
-        hashType: HashType,  // 1 byte
-        args: HexString      // ?? bytes
+        codeHash: HexString,    // 32 bytes
+        hashType: HashType,     // 1 byte
+        args: HexString         // ?? bytes
     }
-    sudtHash: HexString,     // 32 bytes
-    isSudtToCkb: boolean,    // 1 byte
-    ckbMultiplier: BI,       // 8 bytes
-    sudtMultiplier: BI,      // 8 bytes
+    sudtHash: HexString,        // 32 bytes
+    isSudtToCkb: boolean,       // 1 byte
+    ckbMultiplier: BI,          // 8 bytes
+    sudtMultiplier: BI,         // 8 bytes
+    logMinFulfillment: number,  // 1 byte
 }
 
 const newParametricOrderArgsCodec = (argsLength: number) => {
@@ -307,8 +318,17 @@ const newParametricOrderArgsCodec = (argsLength: number) => {
             isSudtToCkb: BooleanCodec,
             ckbMultiplier: PositiveUint64LE,
             sudtMultiplier: PositiveUint64LE,
+            logMinFulfillment: Uint8,
         },
-        ["revision", "terminalLock", "sudtHash", "isSudtToCkb", "ckbMultiplier", "sudtMultiplier"]
+        [
+            "revision",
+            "terminalLock",
+            "sudtHash",
+            "isSudtToCkb",
+            "ckbMultiplier",
+            "sudtMultiplier",
+            "logMinFulfillment"
+        ]
     );
 }
 
