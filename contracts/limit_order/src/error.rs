@@ -9,6 +9,7 @@ pub enum Error {
     Encoding,
     // Add customized errors here...
     ArgsTooShort,
+    InvalidRevision,
     InvalidOutputLock,
     InvalidInputType,
     DecreasingValue,

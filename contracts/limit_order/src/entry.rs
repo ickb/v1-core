@@ -154,6 +154,7 @@ fn extract_amounts(
 
 // Arg data layout in bytes
 // {
+const REVISION: usize = 1;
 const TERMINAL_LOCK_CODE_HASH: usize = 32;
 const TERMINAL_LOCK_HASH_TYPE: usize = 1;
 //  const TERMINAL_LOCK_ARGS : usize = ??;
@@ -166,7 +167,8 @@ const SUDT_MULTIPLIER: usize = 8;
 pub fn extract_args_data(script: &Script) -> Result<(Script, [u8; 32], bool, U256, U256), Error> {
     let args: Bytes = script.args().unpack();
 
-    let minimum_length = TERMINAL_LOCK_CODE_HASH
+    let minimum_length = REVISION
+        + TERMINAL_LOCK_CODE_HASH
         + TERMINAL_LOCK_HASH_TYPE
         + SUDT_HASH
         + IS_SUDT_TO_CKB
@@ -184,6 +186,10 @@ pub fn extract_args_data(script: &Script) -> Result<(Script, [u8; 32], bool, U25
         (field_data, raw_data) = raw_data.split_at(size);
         return field_data;
     };
+
+    if load(REVISION)[0] != 0 {
+        return Err(Error::InvalidRevision);
+    }
 
     let terminal_lock = ScriptBuilder::default()
         .code_hash(Byte32::new_unchecked(

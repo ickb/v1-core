@@ -31,6 +31,7 @@ pub fn extract_tx_hash(index: usize, source: Source) -> Result<[u8; 32], Error> 
 
 // Data layout in bytes
 // {
+const REVISION: usize = 1;
 const DEPOSIT_AMOUNT: usize = 6;
 const DEPOSIT_QUANTITY: usize = 1;
 const OWNED_QUANTITY: usize = 1;
@@ -44,7 +45,7 @@ pub fn extract_receipt_data(
     index: usize,
     source: Source,
 ) -> Result<(u64, u8, Vec<([u8; 32], u64)>), Error> {
-    let min_size = DEPOSIT_AMOUNT + DEPOSIT_QUANTITY + OWNED_QUANTITY;
+    let min_size = REVISION + DEPOSIT_AMOUNT + DEPOSIT_QUANTITY + OWNED_QUANTITY;
     let step_size = OWNED_QUANTITY + TX_HASH;
 
     let data = load_cell_data(index, source)?;
@@ -60,6 +61,11 @@ pub fn extract_receipt_data(
         (field_data, raw_data) = raw_data.split_at(size);
         return field_data;
     };
+
+    //Check that revision is indeed zero
+    if load(REVISION)[0] != 0 {
+        return Err(Error::InvalidRevision);
+    }
 
     // Stored in little endian is the amount of a single deposit
     let mut buffer = [0u8; 8];

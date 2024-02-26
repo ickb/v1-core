@@ -2,7 +2,7 @@ import { Byte32, HashType as HashTypeCodec, createFixedHexBytesCodec } from "@ck
 import { createBytesCodec, createFixedBytesCodec } from "@ckb-lumos/codec";
 import { hexify } from "@ckb-lumos/codec/lib/bytes";
 import { struct } from "@ckb-lumos/codec/lib/molecule";
-import { Uint128LE, Uint64LE } from "@ckb-lumos/codec/lib/number";
+import { Uint128LE, Uint64LE, Uint8 } from "@ckb-lumos/codec/lib/number";
 import { BI, BIish, parseUnit } from "@ckb-lumos/bi";
 import { TransactionSkeleton, TransactionSkeletonType } from "@ckb-lumos/helpers";
 import { Cell, HashType, HexString } from "@ckb-lumos/base";
@@ -30,9 +30,12 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
     const orderLock = limitOrderLock();
     const sudtHash = computeScriptHash(sudtType);
 
-    function create(tx: TransactionSkeletonType, o: PackableOrderArgs & { ckbAmount?: BI, sudtAmount?: BI }) {
+    function create(
+        tx: TransactionSkeletonType,
+        o: Omit<PackableOrderArgs, "revision"> & { ckbAmount?: BI, sudtAmount?: BI }
+    ) {
         let c = I8Cell.from({
-            lock: I8Script.from({ ...orderLock, args: hexify(LimitOrderArgsCodec.pack(o)) }),
+            lock: I8Script.from({ ...orderLock, args: hexify(LimitOrderArgsCodec.pack({ ...o, revision: 0 })) }),
             type: sudtType,
             data: hexify(Uint128LE.pack((o.sudtAmount ?? 0)))
         });
@@ -142,10 +145,19 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
             return undefined;
         }
 
-        //Validate sudt type
-        const o = LimitOrderArgsCodec.unpack(lock.args);
-        if ((type && !scriptEq(type, sudtType)) || o.sudtHash !== sudtHash) {
-            return undefined;
+        try {
+            const o = LimitOrderArgsCodec.unpack(lock.args);
+
+            //Validate sudt type
+            if ((type && !scriptEq(type, sudtType)) || o.sudtHash !== sudtHash) {
+                return undefined;
+            }
+        } catch (e: any) {
+            //Validate revision in the Codec itself
+            if (e && e.message === errorInvalidOrderRevision) {
+                return undefined;
+            }
+            throw e;
         }
 
         return i8lock;
@@ -173,23 +185,23 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
         }
 
         const ckb2SudtOrders: typeof orders = [];
-        const sudt2ckbOrders: typeof orders = [];
+        const sudt2CkbOrders: typeof orders = [];
         for (const order of orders) {
             if (order.isSudtToCkb) {
-                sudt2ckbOrders.push(order);
+                sudt2CkbOrders.push(order);
             } else {
                 ckb2SudtOrders.push(order);
             }
         }
 
         if (sort) {
-            sudt2ckbOrders.sort(sort === "asc" ? sudt2CkbRatioCompare : (o0, o1) => sudt2CkbRatioCompare(o1, o0));
+            sudt2CkbOrders.sort(sort === "asc" ? sudt2CkbRatioCompare : (o0, o1) => sudt2CkbRatioCompare(o1, o0));
             ckb2SudtOrders.sort(sort === "asc" ? (o0, o1) => sudt2CkbRatioCompare(o1, o0) : sudt2CkbRatioCompare);
         }
 
         return {
             ckb2SudtOrders,
-            sudt2ckbOrders,
+            sudt2CkbOrders,
             notOrders: notSimples
         };
     }
@@ -229,13 +241,13 @@ export function sudt2CkbRatioCompare(
 export function limitOrderFundAdapter(
     assets: Assets,
     ckb2SudtOrders: readonly LimitOrder[],
-    sudt2ckbOrders: readonly LimitOrder[],
+    sudt2CkbOrders: readonly LimitOrder[],
 ): Assets {
     const unavailableFunds = [
         TransactionSkeleton()
             .update("inputs", i => i
                 .push(...ckb2SudtOrders.map(c => c.cell))
-                .push(...sudt2ckbOrders.map(c => c.cell)))
+                .push(...sudt2CkbOrders.map(c => c.cell)))
     ];
     return addAssetsFunds(assets, undefined, unavailableFunds)
 }
@@ -265,6 +277,7 @@ const PositiveUint64LE = createFixedBytesCodec<BI, BIish>(
 );
 
 export type PackableOrderArgs = {
+    revision: number,         // 1 byte
     terminalLock: {
         codeHash: HexString, // 32 bytes
         hashType: HashType,  // 1 byte
@@ -288,24 +301,32 @@ const newParametricOrderArgsCodec = (argsLength: number) => {
 
     return struct(
         {
+            revision: Uint8,
             terminalLock: ParametricScriptCodec,
             sudtHash: Byte32,
             isSudtToCkb: BooleanCodec,
             ckbMultiplier: PositiveUint64LE,
             sudtMultiplier: PositiveUint64LE,
         },
-        ["terminalLock", "sudtHash", "isSudtToCkb", "ckbMultiplier", "sudtMultiplier"]
+        ["revision", "terminalLock", "sudtHash", "isSudtToCkb", "ckbMultiplier", "sudtMultiplier"]
     );
 }
 
+export const errorInvalidOrderRevision = "This codec implements exclusively revision zero of limit order arg codec";
 const size = 100;
 const limitOrderArgsCodecs = Object.freeze(Array.from({ length: size }, (_, i) => newParametricOrderArgsCodec(i)));
 export const LimitOrderArgsCodec = createBytesCodec<PackableOrderArgs>({
     pack: (packable) => {
+        if (packable.revision !== 0) {
+            throw Error(errorInvalidOrderRevision);
+        }
         const n = (packable.terminalLock.args.length - 2) / 2;
         return (n < size ? limitOrderArgsCodecs[n] : newParametricOrderArgsCodec(n)).pack(packable);
     },
     unpack: (packed) => {
+        if (packed[0] !== 0) {
+            throw Error(errorInvalidOrderRevision);
+        }
         const n = packed.length - limitOrderArgsCodecs[0].byteLength;
         return (n < size ? limitOrderArgsCodecs[n] : newParametricOrderArgsCodec(n)).unpack(packed);
     }

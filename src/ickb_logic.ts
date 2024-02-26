@@ -213,6 +213,7 @@ export function ickbSudtFundAdapter(
         //Maybe add iCKB receipt cell
         if (ownedCells.length > 0 || unspent.length > 0) {
             const data = hexify(ReceiptDataCodec.pack({
+                revision: 0,
                 depositAmount: ickbDeposits.length > 0 ?
                     BI.from(ickbDeposits[0].cellOutput.capacity)
                         .sub(minimalCellCapacityCompatible(ickbDeposits[0]))
@@ -330,6 +331,7 @@ const PositiveUint8 = createFixedBytesCodec<number, BIish>(
 const Uint48LE = createUintBICodec(6, true);
 
 export type PackableReceiptData = {
+    revision: number,           //  1 byte
     depositAmount: BI,          //  6 bytes
     depositQuantity: number,    //  1 byte
     ownedQuantity: number,      //  1 byte
@@ -351,23 +353,31 @@ const newParametricReceiptDataCodec = (unspentLength: number) => {
 
     return struct(
         {
+            revision: Uint8,
             depositAmount: Uint48LE,
             depositQuantity: Uint8,
             ownedQuantity: Uint8,
             unspent: parametricUnspentCodec
         },
-        ["depositAmount", "depositQuantity", "ownedQuantity", "unspent"]
+        ["revision", "depositAmount", "depositQuantity", "ownedQuantity", "unspent"]
     );
 }
 
+export const errorInvalidReceiptRevision = "This codec implements exclusively revision zero of receipt data codec";
 const size = 100;
 const receiptDataCodecs = Object.freeze(Array.from({ length: size }, (_, i) => newParametricReceiptDataCodec(i)));
 export const ReceiptDataCodec = createBytesCodec<PackableReceiptData>({
     pack: (packable) => {
+        if (packable.revision !== 0) {
+            throw Error(errorInvalidReceiptRevision);
+        }
         const n = packable.unspent.length;
         return (n < size ? receiptDataCodecs[n] : newParametricReceiptDataCodec(n)).pack(packable);
     },
     unpack: (packed) => {
+        if (packed[0] !== 0) {
+            throw Error(errorInvalidReceiptRevision);
+        }
         const n = (packed.length - receiptDataCodecs[0].byteLength) / 33;
         return (n < size ? receiptDataCodecs[n] : newParametricReceiptDataCodec(n)).unpack(packed);
     }
