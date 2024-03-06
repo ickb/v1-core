@@ -157,10 +157,10 @@ fn extract_amounts(
 
 // Arg data layout in bytes
 // {
-const REVISION: usize = 1;
+const UNION_ID: usize = 4;
 const TERMINAL_LOCK_CODE_HASH: usize = 32;
 const TERMINAL_LOCK_HASH_TYPE: usize = 1;
-//  const TERMINAL_LOCK_ARGS : usize = ??;
+//  const TERMINAL_LOCK_ARGS : usize = load(UNION_ID);
 const SUDT_HASH: usize = 32;
 const IS_SUDT_TO_CKB: usize = 1;
 const CKB_MULTIPLIER: usize = 8;
@@ -173,7 +173,7 @@ pub fn extract_args_data(
 ) -> Result<(Script, [u8; 32], bool, U256, U256, U256), Error> {
     let args: Bytes = script.args().unpack();
 
-    let minimum_length = REVISION
+    let minimum_length = UNION_ID
         + TERMINAL_LOCK_CODE_HASH
         + TERMINAL_LOCK_HASH_TYPE
         + SUDT_HASH
@@ -194,8 +194,9 @@ pub fn extract_args_data(
         return field_data;
     };
 
-    if load(REVISION)[0] != 0 {
-        return Err(Error::InvalidRevision);
+    //Check that union id is indeed equal to terminal lock args size
+    if u32::from_le_bytes(load(UNION_ID).try_into().unwrap()) as usize != terminal_lock_args {
+        return Err(Error::InvalidUnionId);
     }
 
     let terminal_lock = ScriptBuilder::default()

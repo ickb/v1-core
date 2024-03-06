@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::result::Result;
+use core::{convert::TryInto, result::Result};
 
 use ckb_std::{
     ckb_constants::Source,
@@ -31,21 +31,21 @@ pub fn extract_tx_hash(index: usize, source: Source) -> Result<[u8; 32], Error> 
 
 // Data layout in bytes
 // {
-const REVISION: usize = 1;
+const UNION_ID: usize = 4;
 const DEPOSIT_AMOUNT: usize = 6;
 const DEPOSIT_QUANTITY: usize = 1;
 const OWNED_QUANTITY: usize = 1;
 //  {
 const TX_HASH: usize = 32;
 //   const OWNED_QUANTITY: usize = 1;
-//  }[]
+//  }[] = 33 * load(UNION_ID);
 // }
 
 pub fn extract_receipt_data(
     index: usize,
     source: Source,
 ) -> Result<(u64, u8, Vec<([u8; 32], u64)>), Error> {
-    let min_size = REVISION + DEPOSIT_AMOUNT + DEPOSIT_QUANTITY + OWNED_QUANTITY;
+    let min_size = UNION_ID + DEPOSIT_AMOUNT + DEPOSIT_QUANTITY + OWNED_QUANTITY;
     let step_size = OWNED_QUANTITY + TX_HASH;
 
     let data = load_cell_data(index, source)?;
@@ -62,9 +62,9 @@ pub fn extract_receipt_data(
         return field_data;
     };
 
-    //Check that revision is indeed zero
-    if load(REVISION)[0] != 0 {
-        return Err(Error::InvalidRevision);
+    //Check that union id is indeed equal to unspent quantity
+    if u32::from_le_bytes(load(UNION_ID).try_into().unwrap()) as usize != unspent_quantity {
+        return Err(Error::InvalidUnionId);
     }
 
     // Stored in little endian is the amount of a single deposit

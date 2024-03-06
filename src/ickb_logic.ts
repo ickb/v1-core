@@ -6,7 +6,7 @@ import { BI, BIish, parseUnit } from "@ckb-lumos/bi";
 import { createBytesCodec, createFixedBytesCodec } from "@ckb-lumos/codec";
 import { hexify } from "@ckb-lumos/codec/lib/bytes";
 import { array, struct } from "@ckb-lumos/codec/lib/molecule/layout";
-import { Uint128LE, Uint8 } from "@ckb-lumos/codec/lib/number/uint";
+import { Uint128LE, Uint32LE, Uint8 } from "@ckb-lumos/codec/lib/number/uint";
 import { extractDaoDataCompatible } from "@ckb-lumos/common-scripts/lib/dao";
 import { TransactionSkeleton, TransactionSkeletonType, minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
 import {
@@ -213,7 +213,7 @@ export function ickbSudtFundAdapter(
         //Maybe add iCKB receipt cell
         if (ownedCells.length > 0 || unspent.length > 0) {
             const data = hexify(ReceiptDataCodec.pack({
-                revision: 0,
+                unionId: unspent.length,
                 depositAmount: ickbDeposits.length > 0 ?
                     BI.from(ickbDeposits[0].cellOutput.capacity)
                         .sub(minimalCellCapacityCompatible(ickbDeposits[0]))
@@ -331,14 +331,14 @@ const PositiveUint8 = createFixedBytesCodec<number, BIish>(
 const Uint48LE = createUintBICodec(6, true);
 
 export type PackableReceiptData = {
-    revision: number,           //  1 byte
+    unionId: number,            //  4 bytes
     depositAmount: BI,          //  6 bytes
     depositQuantity: number,    //  1 byte
     ownedQuantity: number,      //  1 byte
     unspent: {
-        txHash: HexString,      // 32 bytes
+        txHash: HexString,      //  32 bytes
         ownedQuantity: number,  //  1 byte
-    }[]
+    }[]                         //  33 * unionId bytes
 };
 const newParametricReceiptDataCodec = (unspentLength: number) => {
     const unspentCodec = struct(
@@ -353,33 +353,33 @@ const newParametricReceiptDataCodec = (unspentLength: number) => {
 
     return struct(
         {
-            revision: Uint8,
+            unionId: Uint32LE,
             depositAmount: Uint48LE,
             depositQuantity: Uint8,
             ownedQuantity: Uint8,
             unspent: parametricUnspentCodec
         },
-        ["revision", "depositAmount", "depositQuantity", "ownedQuantity", "unspent"]
+        ["unionId", "depositAmount", "depositQuantity", "ownedQuantity", "unspent"]
     );
 }
-
-export const errorInvalidReceiptRevision = "This codec implements exclusively revision zero of receipt data codec";
-const size = 100;
-const receiptDataCodecs = Object.freeze(Array.from({ length: size }, (_, i) => newParametricReceiptDataCodec(i)));
+export const errorUnspentLengthMismatch = "Union id and unspent length are different";
+const N = 255;
+const receiptDataCodecs = Object.freeze(Array.from({ length: N + 1 }, (_, i) => newParametricReceiptDataCodec(i)));
 export const ReceiptDataCodec = createBytesCodec<PackableReceiptData>({
     pack: (packable) => {
-        if (packable.revision !== 0) {
-            throw Error(errorInvalidReceiptRevision);
-        }
         const n = packable.unspent.length;
-        return (n < size ? receiptDataCodecs[n] : newParametricReceiptDataCodec(n)).pack(packable);
+        if (packable.unionId !== n) {
+            throw Error(errorUnspentLengthMismatch);
+        }
+        return (n <= N ? receiptDataCodecs[n] : newParametricReceiptDataCodec(n)).pack(packable);
     },
     unpack: (packed) => {
-        if (packed[0] !== 0) {
-            throw Error(errorInvalidReceiptRevision);
-        }
         const n = (packed.length - receiptDataCodecs[0].byteLength) / 33;
-        return (n < size ? receiptDataCodecs[n] : newParametricReceiptDataCodec(n)).unpack(packed);
+        const o = (n <= N ? receiptDataCodecs[n] : newParametricReceiptDataCodec(n)).unpack(packed);
+        if (o.unionId !== n) {
+            throw Error(errorUnspentLengthMismatch);
+        }
+        return o;
     }
 });
 

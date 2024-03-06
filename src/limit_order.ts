@@ -2,7 +2,7 @@ import { Byte32, HashType as HashTypeCodec, createFixedHexBytesCodec } from "@ck
 import { createBytesCodec, createFixedBytesCodec } from "@ckb-lumos/codec";
 import { hexify } from "@ckb-lumos/codec/lib/bytes";
 import { struct } from "@ckb-lumos/codec/lib/molecule";
-import { Uint128LE, Uint64LE, Uint8 } from "@ckb-lumos/codec/lib/number";
+import { Uint128LE, Uint32LE, Uint64LE, Uint8 } from "@ckb-lumos/codec/lib/number";
 import { BI, BIish } from "@ckb-lumos/bi";
 import { TransactionSkeleton, TransactionSkeletonType } from "@ckb-lumos/helpers";
 import { Cell, HashType, HexString } from "@ckb-lumos/base";
@@ -33,10 +33,11 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
 
     function create(
         tx: TransactionSkeletonType,
-        o: Omit<PackableOrderArgs, "revision"> & { ckbAmount?: BI, sudtAmount?: BI }
+        o: Omit<PackableOrderArgs, "unionId"> & { ckbAmount?: BI, sudtAmount?: BI }
     ) {
+        const oWithUnionId = { ...o, unionId: (o.terminalLock.args.length - 2) / 2 };
         let c = I8Cell.from({
-            lock: I8Script.from({ ...orderLock, args: hexify(LimitOrderArgsCodec.pack({ ...o, revision: 0 })) }),
+            lock: I8Script.from({ ...orderLock, args: hexify(LimitOrderArgsCodec.pack(oWithUnionId)) }),
             type: sudtType,
             data: hexify(Uint128LE.pack((o.sudtAmount ?? 0)))
         });
@@ -153,8 +154,8 @@ export function limitOrder(sudtType: I8Script = i8ScriptPadding) {
                 return undefined;
             }
         } catch (e: any) {
-            //Validate revision in the Codec itself
-            if (e && e.message === errorInvalidOrderRevision) {
+            //Validate unionId in the Codec itself
+            if (e && e.message === errorTerminalLockArgsLengthMismatch) {
                 return undefined;
             }
             throw e;
@@ -287,11 +288,11 @@ const PositiveUint64LE = createFixedBytesCodec<BI, BIish>(
 );
 
 export type PackableOrderArgs = {
-    revision: number,           // 1 byte
+    unionId: number,            // 4 bytes
     terminalLock: {
         codeHash: HexString,    // 32 bytes
         hashType: HashType,     // 1 byte
-        args: HexString         // ?? bytes
+        args: HexString         // unionId bytes
     }
     sudtHash: HexString,        // 32 bytes
     isSudtToCkb: boolean,       // 1 byte
@@ -312,7 +313,7 @@ const newParametricOrderArgsCodec = (argsLength: number) => {
 
     return struct(
         {
-            revision: Uint8,
+            unionId: Uint32LE,
             terminalLock: ParametricScriptCodec,
             sudtHash: Byte32,
             isSudtToCkb: BooleanCodec,
@@ -321,7 +322,7 @@ const newParametricOrderArgsCodec = (argsLength: number) => {
             logMinFulfillment: Uint8,
         },
         [
-            "revision",
+            "unionId",
             "terminalLock",
             "sudtHash",
             "isSudtToCkb",
@@ -332,22 +333,23 @@ const newParametricOrderArgsCodec = (argsLength: number) => {
     );
 }
 
-export const errorInvalidOrderRevision = "This codec implements exclusively revision zero of limit order arg codec";
-const size = 100;
-const limitOrderArgsCodecs = Object.freeze(Array.from({ length: size }, (_, i) => newParametricOrderArgsCodec(i)));
+export const errorTerminalLockArgsLengthMismatch = "Union id and terminalLock args length are different";
+const N = 255;
+const limitOrderArgsCodecs = Object.freeze(Array.from({ length: N + 1 }, (_, i) => newParametricOrderArgsCodec(i)));
 export const LimitOrderArgsCodec = createBytesCodec<PackableOrderArgs>({
     pack: (packable) => {
-        if (packable.revision !== 0) {
-            throw Error(errorInvalidOrderRevision);
-        }
         const n = (packable.terminalLock.args.length - 2) / 2;
-        return (n < size ? limitOrderArgsCodecs[n] : newParametricOrderArgsCodec(n)).pack(packable);
+        if (packable.unionId !== n) {
+            throw Error(errorTerminalLockArgsLengthMismatch);
+        }
+        return (n <= N ? limitOrderArgsCodecs[n] : newParametricOrderArgsCodec(n)).pack(packable);
     },
     unpack: (packed) => {
-        if (packed[0] !== 0) {
-            throw Error(errorInvalidOrderRevision);
-        }
         const n = packed.length - limitOrderArgsCodecs[0].byteLength;
-        return (n < size ? limitOrderArgsCodecs[n] : newParametricOrderArgsCodec(n)).unpack(packed);
+        const o = (n <= N ? limitOrderArgsCodecs[n] : newParametricOrderArgsCodec(n)).unpack(packed);
+        if (o.unionId !== n) {
+            throw Error(errorTerminalLockArgsLengthMismatch);
+        }
+        return o;
     }
 });

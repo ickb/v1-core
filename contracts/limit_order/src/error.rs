@@ -9,7 +9,7 @@ pub enum Error {
     Encoding,
     // Add customized errors here...
     ArgsTooShort,
-    InvalidRevision,
+    InvalidUnionId,
     InvalidOutputLock,
     InvalidInputType,
     DecreasingValue,
