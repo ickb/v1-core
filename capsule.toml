@@ -4,12 +4,8 @@
 # workspace_dir = "."
 
 # capsule version
-version = "0.10.3"
+version = "0.10.4 eff02bf"
 
 [[contracts]]
 name = "ickb_logic"
-template_type = "Rust"
-
-[[contracts]]
-name = "limit_order"
 template_type = "Rust"

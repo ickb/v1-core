@@ -8,21 +8,14 @@ pub enum Error {
     LengthNotEnough,
     Encoding,
     // Add customized errors here...
-    InvalidUnionId,
     ScriptArgs,
-    SudtAmount,
+    InvalidUnionId,
     ScriptMisuse,
     DepositTooSmall,
-    UnequalDeposit,
-    TwoReceipts,
-    NoReceipt,
-    ReceiptQuantity,
-    ReceiptAmount,
-    ReceiptAlreadyFound,
-    OwnedNotReceipted,
-    ZeroTxHash,
+    DepositTooBig,
     EmptyReceipt,
-    UnspentMismatch,
+    ReceiptMismatch,
+    AmountMismatch,
 }
 
 impl From<SysError> for Error {

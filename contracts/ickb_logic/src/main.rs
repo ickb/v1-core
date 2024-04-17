@@ -9,9 +9,9 @@
 
 // define modules
 mod celltype;
+mod constants;
 mod entry;
 mod error;
-mod owned;
 mod utils;
 
 #[cfg(test)]

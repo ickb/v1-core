@@ -23,34 +23,6 @@ pub fn extract_unused_capacity(index: usize, source: Source) -> Result<u64, SysE
     Ok(load_cell_capacity(index, source)? - load_cell_occupied_capacity(index, source)?)
 }
 
-pub fn u64_from(data: &[u8], begin: usize) -> Result<u64, SysError> {
-    let end = begin + 8;
-
-    if data.len() < end {
-        return Err(SysError::Encoding);
-    }
-
-    let mut buffer = [0u8; 8];
-    buffer.copy_from_slice(&data[begin..end]);
-    let number = u64::from_le_bytes(buffer);
-
-    Ok(number)
-}
-
-pub fn u128_from(data: &[u8], begin: usize) -> Result<u128, SysError> {
-    let end = begin + 16;
-
-    if data.len() < end {
-        return Err(SysError::Encoding);
-    }
-
-    let mut buffer = [0u8; 16];
-    buffer.copy_from_slice(&data[begin..end]);
-    let number = u128::from_le_bytes(buffer);
-
-    Ok(number)
-}
-
 pub const fn from_hex(hex_string: &str) -> [u8; 32] {
     if hex_string.len() != 2 + 2 * 32
         || hex_string.as_bytes()[0] != ('0' as u8)
