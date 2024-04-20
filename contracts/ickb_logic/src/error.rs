@@ -8,7 +8,7 @@ pub enum Error {
     LengthNotEnough,
     Encoding,
     // Add customized errors here...
-    ScriptArgs,
+    NotEmptyArgs,
     InvalidUnionId,
     ScriptMisuse,
     DepositTooSmall,

@@ -8,6 +8,7 @@ pub enum Error {
     LengthNotEnough,
     Encoding,
     // Add customized errors here...
+    NotEmptyArgs,
     Mismatch,
 }
 

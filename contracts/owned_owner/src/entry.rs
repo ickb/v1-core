@@ -7,11 +7,15 @@ use ckb_std::{
         load_cell_data, load_cell_lock_hash, load_cell_type_hash, load_script_hash, QueryIter,
     },
 };
-use utils::{extract_metapoint, MetaPoint};
+use utils::{extract_metapoint, has_empty_args, MetaPoint};
 
 use crate::error::Error;
 
 pub fn main() -> Result<(), Error> {
+    if !has_empty_args()? {
+        return Err(Error::NotEmptyArgs);
+    }
+
     let script_hash = load_script_hash()?;
     let default = Accounting { owned: 0, owner: 0 };
     for source in [Source::Input, Source::Output] {

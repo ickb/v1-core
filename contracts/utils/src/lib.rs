@@ -28,6 +28,30 @@ pub fn hash_script(script: &Script) -> [u8; 32] {
     output
 }
 
+pub fn has_empty_args() -> Result<bool, SysError> {
+    let s = load_script()?;
+    let code_hash = s.code_hash();
+    let hash_type = s.hash_type();
+    let args = s.args();
+
+    //The following check covers:
+    // - Input lock args
+    // - Input type args
+    // - Output type args
+    if !args.is_empty() {
+        return Ok(false);
+    }
+
+    //Check that Output lock args are empty
+    if QueryIter::new(load_cell_lock, Source::Output)
+        .any(|s| code_hash == s.code_hash() && hash_type == s.hash_type() && args != s.args())
+    {
+        return Ok(false);
+    }
+
+    Ok(true)
+}
+
 pub fn extract_udt_amount(index: usize, source: Source) -> Result<u128, SysError> {
     let data = load_cell_data(index, source)?;
 

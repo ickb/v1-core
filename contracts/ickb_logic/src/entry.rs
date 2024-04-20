@@ -1,12 +1,11 @@
 use alloc::collections::BTreeMap;
 use core::result::Result;
 
-use ckb_std::{
-    ckb_constants::Source,
-    high_level::{load_script, load_script_hash},
-};
+use ckb_std::{ckb_constants::Source, high_level::load_script_hash};
 
-use utils::{extract_accumulated_rate, extract_udt_amount, extract_unused_capacity};
+use utils::{
+    extract_accumulated_rate, extract_udt_amount, extract_unused_capacity, has_empty_args,
+};
 
 use crate::error::Error;
 use crate::utils::extract_receipt_data;
@@ -19,8 +18,8 @@ use crate::{
 };
 
 pub fn main() -> Result<(), Error> {
-    if load_script()?.args().len() > 0 {
-        return Err(Error::ScriptArgs);
+    if !has_empty_args()? {
+        return Err(Error::NotEmptyArgs);
     }
 
     let ickb_logic_hash: [u8; 32] = load_script_hash()?;
