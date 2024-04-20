@@ -1,23 +1,8 @@
 use core::{convert::TryInto, result::Result};
 
-use ckb_std::{
-    ckb_constants::Source,
-    high_level::{load_cell_data, load_header},
-};
+use ckb_std::{ckb_constants::Source, high_level::load_cell_data};
 
 use crate::{constants::DAO_DEPOSIT_DATA, error::Error};
-
-pub fn extract_udt_amount(index: usize, source: Source) -> Result<u128, Error> {
-    let data = load_cell_data(index, source)?;
-
-    if data.len() < 128 {
-        return Err(Error::Encoding);
-    }
-
-    let udt_amount = u128::from_le_bytes(data[0..128].try_into().unwrap());
-
-    Ok(udt_amount)
-}
 
 // Data layout in bytes
 // {
@@ -52,21 +37,6 @@ pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u32, u64), 
     let deposit_amount = u64::from_le_bytes(load(DEPOSIT_AMOUNT).try_into().unwrap());
 
     Ok((deposit_quantity, deposit_amount))
-}
-
-pub fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, Error> {
-    let d = load_header(index, source)?.raw().dao();
-    let accumulated_rate = u64::from_le_bytes([
-        u8::from(d.nth8()),
-        u8::from(d.nth9()),
-        u8::from(d.nth10()),
-        u8::from(d.nth11()),
-        u8::from(d.nth12()),
-        u8::from(d.nth13()),
-        u8::from(d.nth14()),
-        u8::from(d.nth15()),
-    ]);
-    Ok(accumulated_rate)
 }
 
 pub fn is_deposit_cell(index: usize, source: Source) -> bool {

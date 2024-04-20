@@ -6,10 +6,10 @@ use ckb_std::{
     high_level::{load_script, load_script_hash},
 };
 
-use utils::extract_unused_capacity;
+use utils::{extract_accumulated_rate, extract_udt_amount, extract_unused_capacity};
 
 use crate::error::Error;
-use crate::utils::{extract_accumulated_rate, extract_receipt_data, extract_udt_amount};
+use crate::utils::extract_receipt_data;
 use crate::{
     celltype::{cell_type_iter, CellType},
     constants::{
@@ -89,13 +89,13 @@ fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Er
     return Ok(ickb_amount);
 }
 
-struct Accounting {
-    deposited: u128,
-    receipted: u128,
-}
-
 fn check_output(ickb_logic_hash: [u8; 32]) -> Result<u128, Error> {
     let mut amount_2_accounting: BTreeMap<u64, Accounting> = BTreeMap::new();
+    let default = Accounting {
+        deposited: 0,
+        receipted: 0,
+    };
+
     let mut total_udt_ickb = 0;
 
     for maybe_cell_info in cell_type_iter(Source::Output, ickb_logic_hash) {
@@ -111,19 +111,9 @@ fn check_output(ickb_logic_hash: [u8; 32]) -> Result<u128, Error> {
                     return Err(Error::DepositTooBig);
                 }
 
-                match amount_2_accounting.get_mut(&amount) {
-                    // Note on Overflow: even locking all CKB supply in deposits cannot overflow this counter
-                    Some(a) => a.deposited += 1,
-                    None => {
-                        amount_2_accounting.insert(
-                            amount,
-                            Accounting {
-                                deposited: 1,
-                                receipted: 0,
-                            },
-                        );
-                    }
-                };
+                let accounting = amount_2_accounting.entry(amount).or_insert(default);
+                // Note on Overflow: even locking all CKB supply in deposits cannot overflow this counter
+                accounting.deposited += 1;
             }
             CellType::Receipt => {
                 let (deposit_quantity, deposit_amount) = extract_receipt_data(index, source)?;
@@ -132,20 +122,10 @@ fn check_output(ickb_logic_hash: [u8; 32]) -> Result<u128, Error> {
                     return Err(Error::EmptyReceipt);
                 }
 
-                match amount_2_accounting.get_mut(&deposit_amount) {
-                    // Note on Overflow: even locking all CKB supply in receipts using Uint32 maximum
-                    // as deposit quantity cannot overflow this counter
-                    Some(a) => a.receipted += u128::from(deposit_quantity),
-                    None => {
-                        amount_2_accounting.insert(
-                            deposit_amount,
-                            Accounting {
-                                deposited: 0,
-                                receipted: u128::from(deposit_quantity),
-                            },
-                        );
-                    }
-                };
+                let accounting = amount_2_accounting.entry(deposit_amount).or_insert(default);
+                // Note on Overflow: even locking all CKB supply in receipts using Uint32 maximum
+                // as deposit quantity cannot overflow this counter
+                accounting.deposited += u128::from(deposit_quantity);
             }
             CellType::Udt => {
                 // Note on Overflow: u64 quantities represented with u128, no overflow is possible
@@ -163,4 +143,10 @@ fn check_output(ickb_logic_hash: [u8; 32]) -> Result<u128, Error> {
     }
 
     Ok(total_udt_ickb)
+}
+
+#[derive(Clone, Copy)]
+struct Accounting {
+    deposited: u128,
+    receipted: u128,
 }

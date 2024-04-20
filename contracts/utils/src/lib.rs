@@ -3,9 +3,18 @@
 
 use core::result::Result;
 
-use ckb_std::ckb_types::{packed::Script, prelude::Entity};
-use ckb_std::error::SysError;
-use ckb_std::{ckb_constants::Source, high_level::*};
+use ckb_std::{
+    ckb_types::{
+        packed::{Header, Script},
+        prelude::Entity,
+    },
+    error::SysError,
+    syscalls::{load_header, load_input_by_field},
+    {
+        ckb_constants::{InputField, Source},
+        high_level::*,
+    },
+};
 
 use blake2b_ref::Blake2bBuilder;
 
@@ -19,8 +28,60 @@ pub fn hash_script(script: &Script) -> [u8; 32] {
     output
 }
 
+pub fn extract_udt_amount(index: usize, source: Source) -> Result<u128, SysError> {
+    let data = load_cell_data(index, source)?;
+
+    if data.len() < 128 {
+        return Err(SysError::Encoding);
+    }
+
+    let udt_amount = u128::from_le_bytes(data[0..128].try_into().unwrap());
+
+    Ok(udt_amount)
+}
+
 pub fn extract_unused_capacity(index: usize, source: Source) -> Result<u64, SysError> {
     Ok(load_cell_capacity(index, source)? - load_cell_occupied_capacity(index, source)?)
+}
+
+const DAO_START: usize = 160;
+const C: usize = 8;
+const AR: usize = 8;
+
+pub fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, SysError> {
+    let mut h = [0u8; Header::TOTAL_SIZE];
+    load_header(&mut h, 0, index, source)?;
+    let ar = u64::from_le_bytes(h[DAO_START + C..DAO_START + C + AR].try_into().unwrap());
+    Ok(ar)
+}
+
+const TX_HASH: usize = 32;
+const INDEX: usize = 4;
+
+pub fn extract_metapoint(source: Source, index: usize) -> Result<MetaPoint, SysError> {
+    if source == Source::Output {
+        return Ok(MetaPoint {
+            tx_hash: None,
+            index: i64::from(index as u32),
+        });
+    }
+
+    let mut d = [0u8; TX_HASH + INDEX];
+    load_input_by_field(&mut d, 0, index, source, InputField::OutPoint)?;
+    Ok(MetaPoint {
+        tx_hash: Some(d[..TX_HASH].try_into().unwrap()),
+        index: u32::from_le_bytes(d[TX_HASH..TX_HASH + INDEX].try_into().unwrap()) as i64,
+    })
+}
+
+// MetaPoint is an extension of OutPoint functionalities
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub struct MetaPoint {
+    // tx_hash contains Some(tx_hash) if it's an input OutPoint, otherwise None
+    pub tx_hash: Option<[u8; 32]>,
+    // index has been extended from u32 to i64 to allow extended validation logic
+    pub index: i64,
 }
 
 pub const fn from_hex(hex_string: &str) -> [u8; 32] {
