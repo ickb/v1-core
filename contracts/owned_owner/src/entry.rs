@@ -26,7 +26,7 @@ pub fn main() -> Result<(), Error> {
             .enumerate()
             .filter(|(_, h)| h == &script_hash)
         {
-            let metapoint = extract_metapoint(source, index)?;
+            let metapoint = extract_metapoint(index, source)?;
             let accounting = metapoint_2_accounting.entry(metapoint).or_insert(default);
             // Note on Overflow: even locking all CKB supply in owned cells cannot overflow this counter
             accounting.owned += 1;
@@ -37,7 +37,7 @@ pub fn main() -> Result<(), Error> {
             .enumerate()
             .filter(|(_, maybe_h)| maybe_h == &Some(script_hash))
         {
-            let metapoint = extract_owned_metapoint(source, index)?;
+            let metapoint = extract_owned_metapoint(index, source)?;
             let accounting = metapoint_2_accounting.entry(metapoint).or_insert(default);
             // Note on Overflow: even locking all CKB supply in owner cells cannot overflow this counter
             accounting.owner += 1;
@@ -60,8 +60,8 @@ struct Accounting {
     owner: u64,
 }
 
-fn extract_owned_metapoint(source: Source, index: usize) -> Result<MetaPoint, Error> {
-    let metapoint = extract_metapoint(source, index)?;
+fn extract_owned_metapoint(index: usize, source: Source) -> Result<MetaPoint, Error> {
+    let metapoint = extract_metapoint(index, source)?;
     let owned_distance = load_cell_data(index, source)?;
     if owned_distance.len() < 4 {
         return Err(Error::Encoding);

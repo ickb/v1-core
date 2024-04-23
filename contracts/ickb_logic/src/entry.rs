@@ -4,7 +4,7 @@ use core::result::Result;
 use ckb_std::{ckb_constants::Source, high_level::load_script_hash};
 
 use utils::{
-    extract_accumulated_rate, extract_udt_amount, extract_unused_capacity, has_empty_args,
+    extract_accumulated_rate, extract_udt_cell_data, extract_unused_capacity, has_empty_args,
 };
 
 use crate::error::Error;
@@ -62,7 +62,7 @@ fn check_input(ickb_logic_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
             }
             CellType::Udt => {
                 // Note on Overflow: u64 quantities represented with u128, no overflow is possible
-                total_udt_ickb += extract_udt_amount(index, source)?;
+                total_udt_ickb += extract_udt_cell_data(index, source)?.0;
             }
             CellType::Unknown => {}
         }
@@ -128,7 +128,7 @@ fn check_output(ickb_logic_hash: [u8; 32]) -> Result<u128, Error> {
             }
             CellType::Udt => {
                 // Note on Overflow: u64 quantities represented with u128, no overflow is possible
-                total_udt_ickb += extract_udt_amount(index, source)?;
+                total_udt_ickb += extract_udt_cell_data(index, source)?.0;
             }
             CellType::Unknown => {}
         }

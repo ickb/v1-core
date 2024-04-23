@@ -1,8 +1,9 @@
 #![no_std]
-#![cfg_attr(not(test), no_main)]
+extern crate alloc;
 
 use core::result::Result;
 
+use alloc::vec::Vec;
 use ckb_std::{
     ckb_types::{
         packed::{Header, Script},
@@ -52,16 +53,18 @@ pub fn has_empty_args() -> Result<bool, SysError> {
     Ok(true)
 }
 
-pub fn extract_udt_amount(index: usize, source: Source) -> Result<u128, SysError> {
+const AMOUNT: usize = 16;
+
+pub fn extract_udt_cell_data(index: usize, source: Source) -> Result<(u128, Vec<u8>), SysError> {
     let data = load_cell_data(index, source)?;
 
-    if data.len() < 128 {
+    if data.len() < AMOUNT {
         return Err(SysError::Encoding);
     }
 
-    let udt_amount = u128::from_le_bytes(data[0..128].try_into().unwrap());
-
-    Ok(udt_amount)
+    let udt_amount = u128::from_le_bytes(data[..AMOUNT].try_into().unwrap());
+    let extra_data = data[AMOUNT..].to_vec();
+    Ok((udt_amount, extra_data))
 }
 
 pub fn extract_unused_capacity(index: usize, source: Source) -> Result<u64, SysError> {
@@ -82,7 +85,7 @@ pub fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, Sys
 const TX_HASH: usize = 32;
 const INDEX: usize = 4;
 
-pub fn extract_metapoint(source: Source, index: usize) -> Result<MetaPoint, SysError> {
+pub fn extract_metapoint(index: usize, source: Source) -> Result<MetaPoint, SysError> {
     if source == Source::Output {
         return Ok(MetaPoint {
             tx_hash: None,
