@@ -102,8 +102,7 @@ pub fn extract_metapoint(index: usize, source: Source) -> Result<MetaPoint, SysE
 }
 
 // MetaPoint is an extension of OutPoint functionalities
-
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct MetaPoint {
     // tx_hash contains Some(tx_hash) if it's an input OutPoint, otherwise None
     pub tx_hash: Option<[u8; 32]>,

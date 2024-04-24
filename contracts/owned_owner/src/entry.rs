@@ -17,30 +17,36 @@ pub fn main() -> Result<(), Error> {
     }
 
     let script_hash = load_script_hash()?;
+    let is_script = |index: usize, source: Source| {
+        Ok((
+            load_cell_lock_hash(index, source)? == script_hash,
+            load_cell_type_hash(index, source)? == Some(script_hash),
+        ))
+    };
+
     let default = Accounting { owned: 0, owner: 0 };
     for source in [Source::Input, Source::Output] {
         let mut metapoint_2_accounting: BTreeMap<MetaPoint, Accounting> = BTreeMap::new();
 
-        //Owned Cells
-        for (index, _) in QueryIter::new(load_cell_lock_hash, source)
-            .enumerate()
-            .filter(|(_, h)| h == &script_hash)
-        {
-            let metapoint = extract_metapoint(index, source)?;
-            let accounting = metapoint_2_accounting.entry(metapoint).or_insert(default);
-            // Note on Overflow: even locking all CKB supply in owned cells cannot overflow this counter
-            accounting.owned += 1;
-        }
-
-        //Owner Cells
-        for (index, _) in QueryIter::new(load_cell_type_hash, source)
-            .enumerate()
-            .filter(|(_, maybe_h)| maybe_h == &Some(script_hash))
-        {
-            let metapoint = extract_owned_metapoint(index, source)?;
-            let accounting = metapoint_2_accounting.entry(metapoint).or_insert(default);
-            // Note on Overflow: even locking all CKB supply in owner cells cannot overflow this counter
-            accounting.owner += 1;
+        for (index, is_script) in QueryIter::new(is_script, source).enumerate() {
+            match is_script {
+                (false, false) => (),
+                (false, true) => {
+                    // Owner Cell
+                    let metapoint = extract_owned_metapoint(index, source)?;
+                    let accounting = metapoint_2_accounting.entry(metapoint).or_insert(default);
+                    // Note on Overflow: even locking all CKB supply in owner cells cannot overflow this counter
+                    accounting.owner += 1;
+                }
+                (true, false) => {
+                    // Owned Cell
+                    let metapoint = extract_metapoint(index, source)?;
+                    let accounting = metapoint_2_accounting.entry(metapoint).or_insert(default);
+                    // Note on Overflow: even locking all CKB supply in owned cells cannot overflow this counter
+                    accounting.owned += 1;
+                }
+                (true, true) => return Err(Error::ScriptMisuse),
+            }
         }
 
         if metapoint_2_accounting
@@ -68,7 +74,6 @@ fn extract_owned_metapoint(index: usize, source: Source) -> Result<MetaPoint, Er
     }
 
     let d = i32::from_le_bytes(owned_distance[..4].try_into().unwrap());
-
     return Ok(MetaPoint {
         tx_hash: metapoint.tx_hash,
         index: metapoint.index + d as i64,
