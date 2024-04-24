@@ -8,12 +8,21 @@ pub enum Error {
     LengthNotEnough,
     Encoding,
     // Add customized errors here...
-    ArgsTooShort,
-    InvalidUnionId,
-    InvalidOutputLock,
-    InvalidInputType,
-    DecreasingValue,
+    NotEmptyArgs,
+    DuplicatedMaster,
     InvalidAction,
+    DataTooLong,
+    MissingUdtType,
+    SameMaster,
+    ScriptMisuse,
+    DifferentType,
+    NotFulfilled,
+    DifferentMetadata,
+    AttemptToChangeFulfilled,
+    DecreasingValue,
+    InsufficientMatch,
+    InsufficientResidual,
+    InvalidConfiguration,
 }
 
 impl From<SysError> for Error {

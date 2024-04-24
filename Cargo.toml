@@ -1,5 +1,5 @@
 [workspace]
-members = ["tests", "contracts/ickb_logic", "contracts/owned_owner"]
+members = ["tests", "contracts/ickb_logic", "contracts/owned_owner", "contracts/limit_order"]
 
 [profile.release]
 overflow-checks = true

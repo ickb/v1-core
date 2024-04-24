@@ -13,3 +13,7 @@ template_type = "Rust"
 [[contracts]]
 name = "owned_owner"
 template_type = "Rust"
+
+[[contracts]]
+name = "limit_order"
+template_type = "Rust"
