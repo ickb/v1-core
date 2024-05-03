@@ -13,6 +13,5 @@ target
 contracts/c/build/*
 
 # others
-build/*
 #!.gitkeep
 .tmp/
