@@ -1,32 +1,31 @@
 {
   "name": "@ickb/v1-core",
-  "version": "1.0.1",
+  "version": "1.3.0",
   "description": "",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "deploy": "node -r ts-node/register --env-file=env/${npm_config_chain}/.env src/deploy.ts"
+    "build": "tsc"
   },
   "files": [
     "/lib"
   ],
   "keywords": [],
-  "author": "",
+  "author": "phroi",
   "license": "MIT",
   "dependencies": {
-    "@ckb-lumos/base": "^0.21.1",
-    "@ckb-lumos/bi": "^0.21.1",
-    "@ckb-lumos/ckb-indexer": "^0.21.1",
-    "@ckb-lumos/codec": "^0.21.1",
-    "@ckb-lumos/common-scripts": "^0.21.1",
-    "@ckb-lumos/helpers": "^0.21.1",
-    "@ckb-lumos/hd": "^0.21.1",
-    "@ckb-lumos/rpc": "^0.21.1",
-    "@ickb/lumos-utils": "^1.0.0"
+    "@ckb-lumos/base": "^0.22.2",
+    "@ckb-lumos/bi": "^0.22.2",
+    "@ckb-lumos/ckb-indexer": "^0.22.2",
+    "@ckb-lumos/codec": "^0.22.2",
+    "@ckb-lumos/common-scripts": "^0.22.2",
+    "@ckb-lumos/helpers": "^0.22.2",
+    "@ckb-lumos/hd": "^0.22.2",
+    "@ckb-lumos/rpc": "^0.22.2",
+    "@ickb/lumos-utils": "1.3.0"
   },
   "devDependencies": {
-    "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
-  }
+    "typescript": "^5.4.5"
+  },
+  "packageManager": "pnpm@9.0.6+sha256.0624e30eff866cdeb363b15061bdb7fd9425b17bc1bb42c22f5f4efdea21f6b3"
 }
