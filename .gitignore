@@ -1,17 +1,3 @@
 src/experiments.ts
 node_modules/*
 lib/*
-
-deployment.toml
-migrations/*
-
-# Rust
-target
-.cache/.cargo/*
-
-# C
-contracts/c/build/*
-
-# others
-#!.gitkeep
-.tmp/
