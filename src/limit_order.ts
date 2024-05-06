@@ -1,17 +1,17 @@
-import { Byte32, HashType as HashTypeCodec, createFixedHexBytesCodec } from "@ckb-lumos/base/lib/blockchain";
+import { Byte32, HashType as HashTypeCodec, createFixedHexBytesCodec } from "@ckb-lumos/base/lib/blockchain.js";
 import { createBytesCodec, createFixedBytesCodec } from "@ckb-lumos/codec";
-import { hexify } from "@ckb-lumos/codec/lib/bytes";
+import { hexify } from "@ckb-lumos/codec/lib/bytes.js";
 import { struct } from "@ckb-lumos/codec/lib/molecule";
 import { Uint128LE, Uint32LE, Uint64LE, Uint8 } from "@ckb-lumos/codec/lib/number";
-import { BI, BIish } from "@ckb-lumos/bi";
-import { TransactionSkeleton, TransactionSkeletonType } from "@ckb-lumos/helpers";
-import { Cell, HashType, HexString } from "@ckb-lumos/base";
-import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
+import { BI, type BIish } from "@ckb-lumos/bi";
+import { TransactionSkeleton, type TransactionSkeletonType } from "@ckb-lumos/helpers";
+import type { Cell, HashType, HexString } from "@ckb-lumos/base";
+import { computeScriptHash } from "@ckb-lumos/base/lib/utils.js";
 import {
-    Assets, BooleanCodec, I8Cell, I8Script, addAssetsFunds, addCells,
+    type Assets, BooleanCodec, I8Cell, I8Script, addAssetsFunds, addCells,
     defaultScript, i8ScriptPadding, scriptEq, simpleSifter
 } from "@ickb/lumos-utils";
-import { ickbSudtType } from "./ickb_logic";
+import { ickbSudtType } from "./ickb_logic.js";
 
 export type LimitOrder = PackableOrderArgs & {
     cell: I8Cell,

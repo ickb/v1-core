@@ -1,16 +1,16 @@
-import { Cell, Hash, HexString } from "@ckb-lumos/base";
-import { Byte32 } from "@ckb-lumos/base/lib/blockchain";
-import { EpochSinceValue, parseAbsoluteEpochSince, parseEpoch } from "@ckb-lumos/base/lib/since";
-import { computeScriptHash } from "@ckb-lumos/base/lib/utils";
-import { BI, BIish, parseUnit } from "@ckb-lumos/bi";
+import type { Cell, Hash, HexString } from "@ckb-lumos/base";
+import { Byte32 } from "@ckb-lumos/base/lib/blockchain.js";
+import { type EpochSinceValue, parseAbsoluteEpochSince, parseEpoch } from "@ckb-lumos/base/lib/since.js";
+import { computeScriptHash } from "@ckb-lumos/base/lib/utils.js";
+import { BI, type BIish, parseUnit } from "@ckb-lumos/bi";
 import { createBytesCodec, createFixedBytesCodec } from "@ckb-lumos/codec";
-import { hexify } from "@ckb-lumos/codec/lib/bytes";
-import { array, struct } from "@ckb-lumos/codec/lib/molecule/layout";
-import { Uint128LE, Uint32LE, Uint8 } from "@ckb-lumos/codec/lib/number/uint";
-import { extractDaoDataCompatible } from "@ckb-lumos/common-scripts/lib/dao";
-import { TransactionSkeleton, TransactionSkeletonType, minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
+import { hexify } from "@ckb-lumos/codec/lib/bytes.js";
+import { array, struct } from "@ckb-lumos/codec/lib/molecule/layout.js";
+import { Uint128LE, Uint32LE, Uint8 } from "@ckb-lumos/codec/lib/number/uint.js";
+import { extractDaoDataCompatible } from "@ckb-lumos/common-scripts/lib/dao.js";
+import { TransactionSkeleton, type TransactionSkeletonType, minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
 import {
-    Assets, I8Cell, I8Header, I8Script, addAsset, addCells, capacitySifter, createUintBICodec,
+    type Assets, I8Cell, I8Header, I8Script, addAsset, addCells, capacitySifter, createUintBICodec,
     daoDeposit, daoRequestWithdrawalFrom, daoRequestWithdrawalWith, daoSifter, daoWithdrawFrom, defaultScript,
     epochSinceCompare, errorUndefinedBlockNumber, headerDeps, isDaoDeposit, logSplit, scriptEq, since
 } from "@ickb/lumos-utils";
