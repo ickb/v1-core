@@ -11,3 +11,5 @@ rm deploy-tx.json;
 
 ckb-cli deploy gen-txs --deployment-config ./deployment.toml --migration-dir ./migrations --from-address $address --sign-now --info-file deploy-tx.json;
 ckb-cli deploy apply-txs --info-file ./deploy-tx.json --migration-dir ./migrations;
+
+mv migrations/* migrations/latest.json;

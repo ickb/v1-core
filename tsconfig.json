@@ -101,6 +101,9 @@
     "skipLibCheck": true /* Skip type checking all .d.ts files. */
   },
   "include": [
-    "src/**/*"
+    "src/**/*.ts",
+    "scripts/deployment/mainnet/migrations/*.json",
+    "scripts/deployment/testnet/migrations/*.json",
+    "scripts/deployment/devnet/migrations/*.json"
   ]
 }

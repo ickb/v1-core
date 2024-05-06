@@ -1,15 +1,15 @@
 [[cells]]
-name = "ickb_logic"
+name = "ICKB_LOGIC"
 enable_type_id = true 
 location = { file = "../../build/release/ickb_logic" }
 
 [[cells]]
-name = "limit_order"
+name = "LIMIT_ORDER"
 enable_type_id = true 
 location = { file = "../../build/release/limit_order" }
 
 [[cells]]
-name = "owned_owner"
+name = "OWNED_OWNER"
 enable_type_id = true 
 location = { file = "../../build/release/owned_owner" }
 
@@ -17,7 +17,7 @@ location = { file = "../../build/release/owned_owner" }
 # xUDT deployment, see:
 # https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0052-extensible-udt/0052-extensible-udt.md
 [[cells]]
-name = "xudt"
+name = "XUDT"
 enable_type_id = false
 location = { tx_hash = "0xc07844ce21b38e4b071dd0e1ee3b0e27afd8d7532491327f39b786343f558ab7", index = 0 }
 
@@ -25,22 +25,22 @@ location = { tx_hash = "0xc07844ce21b38e4b071dd0e1ee3b0e27afd8d7532491327f39b786
 # Genesis scripts deployments, see:
 # https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0024-ckb-genesis-script-list/0024-ckb-genesis-script-list.md
 [[cells]]
-name = "secp256k1_blake160"
+name = "SECP256K1_BLAKE160"
 enable_type_id = false
 location = { tx_hash = "0xe2fb199810d49a4d8beec56718ba2593b665db9d52299a0f9e6e75416d73ff5c", index = 1 }
 
 [[cells]]
-name = "dao"
+name = "DAO"
 enable_type_id = false
 location = { tx_hash = "0xe2fb199810d49a4d8beec56718ba2593b665db9d52299a0f9e6e75416d73ff5c", index = 2 }
 
 [[cells]]
-name = "secp256k1_data"
+name = "SECP256K1_DATA"
 enable_type_id = false
 location = { tx_hash = "0xe2fb199810d49a4d8beec56718ba2593b665db9d52299a0f9e6e75416d73ff5c", index = 3 }
 
 [[cells]]
-name = "secp256k1_blake160_multisig"
+name = "SECP256K1_BLAKE160_MULTISIG"
 enable_type_id = false
 location = { tx_hash = "0xe2fb199810d49a4d8beec56718ba2593b665db9d52299a0f9e6e75416d73ff5c", index = 4 }
  
@@ -48,14 +48,14 @@ location = { tx_hash = "0xe2fb199810d49a4d8beec56718ba2593b665db9d52299a0f9e6e75
 [[dep_groups]]
 name = "ickb_dep_group"
 cells = [
-  "ickb_logic",
-  "limit_order",
-  "owned_owner",
-  "xudt",
-  "secp256k1_blake160",
-  "dao",
-  "secp256k1_data",
-  "secp256k1_blake160_multisig"
+  "ICKB_LOGIC",
+  "LIMIT_ORDER",
+  "OWNED_OWNER",
+  "XUDT",
+  "SECP256K1_BLAKE160",
+  "DAO",
+  "SECP256K1_DATA",
+  "SECP256K1_BLAKE160_MULTISIG"
 ]
 
 # TODO

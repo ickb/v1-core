@@ -1,15 +1,15 @@
 [[cells]]
-name = "ickb_logic"
+name = "ICKB_LOGIC"
 enable_type_id = true 
 location = { file = "../../build/release/ickb_logic" }
 
 [[cells]]
-name = "limit_order"
+name = "LIMIT_ORDER"
 enable_type_id = true 
 location = { file = "../../build/release/limit_order" }
 
 [[cells]]
-name = "owned_owner"
+name = "OWNED_OWNER"
 enable_type_id = true 
 location = { file = "../../build/release/owned_owner" }
 
@@ -17,7 +17,7 @@ location = { file = "../../build/release/owned_owner" }
 # xUDT deployment, see:
 # https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0052-extensible-udt/0052-extensible-udt.md
 [[cells]]
-name = "xudt"
+name = "XUDT"
 enable_type_id = false
 location = { tx_hash = "0xbf6fb538763efec2a70a6a3dcb7242787087e1030c4e7d86585bc63a9d337f5f", index = 0 }
  
@@ -25,22 +25,22 @@ location = { tx_hash = "0xbf6fb538763efec2a70a6a3dcb7242787087e1030c4e7d86585bc6
 # Genesis scripts deployments, see:
 # https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0024-ckb-genesis-script-list/0024-ckb-genesis-script-list.md
 [[cells]]
-name = "secp256k1_blake160"
+name = "SECP256K1_BLAKE160"
 enable_type_id = false
 location = { tx_hash = "0x8f8c79eb6671709633fe6a46de93c0fedc9c1b8a6527a18d3983879542635c9f", index = 1 }
 
 [[cells]]
-name = "dao"
+name = "DAO"
 enable_type_id = false
 location = { tx_hash = "0x8f8c79eb6671709633fe6a46de93c0fedc9c1b8a6527a18d3983879542635c9f", index = 2 }
 
 [[cells]]
-name = "secp256k1_data"
+name = "SECP256K1_DATA"
 enable_type_id = false
 location = { tx_hash = "0x8f8c79eb6671709633fe6a46de93c0fedc9c1b8a6527a18d3983879542635c9f", index = 3 }
 
 [[cells]]
-name = "secp256k1_blake160_multisig"
+name = "SECP256K1_BLAKE160_MULTISIG"
 enable_type_id = false
 location = { tx_hash = "0x8f8c79eb6671709633fe6a46de93c0fedc9c1b8a6527a18d3983879542635c9f", index = 4 }
 
@@ -48,14 +48,14 @@ location = { tx_hash = "0x8f8c79eb6671709633fe6a46de93c0fedc9c1b8a6527a18d398387
 [[dep_groups]]
 name = "ickb_dep_group"
 cells = [
-  "ickb_logic",
-  "limit_order",
-  "owned_owner",
-  "xudt",
-  "secp256k1_blake160",
-  "dao",
-  "secp256k1_data",
-  "secp256k1_blake160_multisig"
+  "ICKB_LOGIC",
+  "LIMIT_ORDER",
+  "OWNED_OWNER",
+  "XUDT",
+  "SECP256K1_BLAKE160",
+  "DAO",
+  "SECP256K1_DATA",
+  "SECP256K1_BLAKE160_MULTISIG"
 ]
 
 # The lock script set to output cells

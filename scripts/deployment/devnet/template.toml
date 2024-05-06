@@ -1,21 +1,21 @@
 [[cells]]
-name = "ickb_logic"
+name = "ICKB_LOGIC"
 enable_type_id = true 
 location = { file = "../../build/release/ickb_logic" }
 
 [[cells]]
-name = "limit_order"
+name = "LIMIT_ORDER"
 enable_type_id = true 
 location = { file = "../../build/release/limit_order" }
 
 [[cells]]
-name = "owned_owner"
+name = "OWNED_OWNER"
 enable_type_id = true 
 location = { file = "../../build/release/owned_owner" }
 
 
 [[cells]]
-name = "xudt"
+name = "XUDT"
 enable_type_id = false
 location = { file = "../../build/release/xudt" }
 
@@ -23,22 +23,22 @@ location = { file = "../../build/release/xudt" }
 # Genesis scripts deployments, see:
 # https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0024-ckb-genesis-script-list/0024-ckb-genesis-script-list.md
 [[cells]]
-name = "secp256k1_blake160"
+name = "SECP256K1_BLAKE160"
 enable_type_id = false
 location = { tx_hash = "${genesis_tx_hash}", index = 1 }
 
 [[cells]]
-name = "dao"
+name = "DAO"
 enable_type_id = false
 location = { tx_hash = "${genesis_tx_hash}", index = 2 }
 
 [[cells]]
-name = "secp256k1_data"
+name = "SECP256K1_DATA"
 enable_type_id = false
 location = { tx_hash = "${genesis_tx_hash}", index = 3 }
 
 [[cells]]
-name = "secp256k1_blake160_multisig"
+name = "SECP256K1_BLAKE160_MULTISIG"
 enable_type_id = false
 location = { tx_hash = "${genesis_tx_hash}", index = 4 }
  
@@ -46,14 +46,14 @@ location = { tx_hash = "${genesis_tx_hash}", index = 4 }
 [[dep_groups]]
 name = "ickb_dep_group"
 cells = [
-  "ickb_logic",
-  "limit_order",
-  "owned_owner",
-  "xudt",
-  "secp256k1_blake160",
-  "dao",
-  "secp256k1_data",
-  "secp256k1_blake160_multisig",
+  "ICKB_LOGIC",
+  "LIMIT_ORDER",
+  "OWNED_OWNER",
+  "XUDT",
+  "SECP256K1_BLAKE160",
+  "DAO",
+  "SECP256K1_DATA",
+  "SECP256K1_BLAKE160_MULTISIG",
 ]
 
 # The lock script set to output cells
