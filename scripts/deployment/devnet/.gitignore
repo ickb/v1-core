@@ -1,0 +1,3 @@
+deployment.toml
+migrations/*
+deploy-tx.json
