@@ -1,8 +1,7 @@
 import {
     I8CellDep, I8OutPoint, I8Script, ScriptConfigAdapter, cellDeps, defaultScript,
-    getChainInfo, i8ScriptPadding, initializeConfig, getConfig
+    getChainInfo, i8ScriptPadding, initializeConfig, getConfig, hex
 } from "@ickb/lumos-utils";
-import { BI } from "@ckb-lumos/bi";
 import devnetMigration from '../scripts/deployment/devnet/migrations/latest.json';
 import type { ScriptConfigs } from "@ckb-lumos/config-manager/lib/types.js";
 
@@ -14,7 +13,7 @@ export function initializeIckbConfig() {
 
     const { cell_recipes, dep_group_recipes } = devnetMigration;
     const { tx_hash, index } = dep_group_recipes[0];
-    const outPoint = I8OutPoint.from({ txHash: tx_hash, index: BI.from(index).toHexString() });
+    const outPoint = I8OutPoint.from({ txHash: tx_hash, index: hex(index) });
 
     const newScriptConfig: ScriptConfigs = {};
     for (const c of cell_recipes) {

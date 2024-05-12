@@ -1,37 +1,33 @@
-import type { Cell, Hash, HexString } from "@ckb-lumos/base";
-import { Byte32 } from "@ckb-lumos/base/lib/blockchain.js";
+import type { Cell, OutPoint } from "@ckb-lumos/base";
 import { type EpochSinceValue, parseAbsoluteEpochSince, parseEpoch } from "@ckb-lumos/base/lib/since.js";
 import { computeScriptHash } from "@ckb-lumos/base/lib/utils.js";
-import { BI, type BIish, parseUnit } from "@ckb-lumos/bi";
-import { createBytesCodec, createFixedBytesCodec } from "@ckb-lumos/codec";
 import { hexify } from "@ckb-lumos/codec/lib/bytes.js";
-import { array, struct } from "@ckb-lumos/codec/lib/molecule/layout.js";
-import { Uint128LE, Uint32LE, Uint8 } from "@ckb-lumos/codec/lib/number/uint.js";
 import { extractDaoDataCompatible } from "@ckb-lumos/common-scripts/lib/dao.js";
-import { TransactionSkeleton, type TransactionSkeletonType, minimalCellCapacityCompatible } from "@ckb-lumos/helpers";
+import { TransactionSkeleton, type TransactionSkeletonType, minimalCellCapacity } from "@ckb-lumos/helpers";
 import {
-    type Assets, I8Cell, I8Header, I8Script, addAsset, addCells, capacitySifter, createUintBICodec,
-    daoDeposit, daoRequestWithdrawalFrom, daoRequestWithdrawalWith, daoSifter, daoWithdrawFrom, defaultScript,
-    epochSinceCompare, errorUndefinedBlockNumber, headerDeps, isDaoDeposit, logSplit, scriptEq, since
+    type Assets, I8Cell, I8Header, I8Script, addAsset, addCells, daoDeposit, daoRequestWithdrawalFrom,
+    daoRequestWithdrawalWith, daoSifter, daoWithdrawFrom, defaultScript, epochSinceCompare, errorUndefinedBlockNumber,
+    headerDeps, isDaoDeposit, logSplit, scriptEq, since, typeSifter, isDaoWithdrawalRequest, lockExpanderFrom, hex,
+    ckbInShannons, Uint128
 } from "@ickb/lumos-utils";
+import { OwnedOwnerData, ReceiptData, UdtData } from "./encoding.js";
 
-export type ReceiptGroups = {
-    receipts: I8Cell[],
-    capacities: I8Cell[],
-    withdrawalRequests: I8Cell[]
-};
+export type WithdrawalRequestGroup = Readonly<{
+    ownedWithdrawalRequest: I8Cell,
+    owner: I8Cell,
+}>;
+
 
 export function ickbSifter(
     inputs: readonly Cell[],
     accountLockExpander: (c: Cell) => I8Script | undefined,
     getHeader: (blockNumber: string, context: Cell) => I8Header
 ) {
-    const ickbSudt = ickbSudtType();
+    const ickbUdt = ickbUdtType();
     const ickbLogic = ickbLogicScript();
 
-    const sudts: I8Cell[] = [];
+    const udts: I8Cell[] = [];
     const receipts: I8Cell[] = [];
-    let capacities: I8Cell[] = [];
     let withdrawalRequests: I8Cell[] = [];
     let ickbDepositPool: I8Cell[] = [];
     let unknowns: Cell[] = [];
@@ -41,12 +37,12 @@ export function ickbSifter(
             unknowns.push(c);
             continue
         }
-        if (scriptEq(c.cellOutput.type, ickbSudt)) {
-            sudts.push(I8Cell.from({
+        if (scriptEq(c.cellOutput.type, ickbUdt)) {
+            udts.push(I8Cell.from({
                 ...c,
                 cellOutput: {
                     lock: accountLock,
-                    type: ickbSudt,
+                    type: ickbUdt,
                     capacity: c.cellOutput.capacity
                 }
             }));
@@ -76,53 +72,50 @@ export function ickbSifter(
         );
     }
 
-    const ickbLogicExpander = (c: Cell) => (scriptEq(c.cellOutput.lock, ickbLogic) ? ickbLogic : undefined);
-    ({ capacities, notCapacities: unknowns } = capacitySifter(unknowns, ickbLogicExpander));
-
+    let unknowns_: I8Cell[];
     ({
         deposits: ickbDepositPool,
+        withdrawalRequests: unknowns_,
+        notDaos: unknowns
+    } = daoSifter(unknowns, lockExpanderFrom(ickbLogic), getHeader));
+    unknowns = unknowns.concat(unknowns_);
+
+    const ownedOwner = ownedOwnerScript();
+    ({
+        deposits: unknowns_,
         withdrawalRequests,
         notDaos: unknowns
-    } = daoSifter(unknowns, ickbLogicExpander, getHeader));
+    } = daoSifter(unknowns, lockExpanderFrom(ownedOwner), getHeader));
+    unknowns = unknowns.concat(unknowns_);
 
-    //Filter owned cells by tx hash of receipts
-    const txHash2OwnedQuantity = receiptOwned(receipts);
-    for (const cc of [capacities, withdrawalRequests]) {
-        const cloned = [...cc];
-        cc.length = 0;
-        for (const c of cloned) {
-            if (txHash2OwnedQuantity.has(c.outPoint!.txHash)) {
-                cc.push(c);
-            } else {
-                unknowns.push(c);
-            }
+    let owners: I8Cell[];
+    ({ types: owners, notTypes: unknowns } = typeSifter(unknowns, ownedOwner, accountLockExpander));
+
+    const key = (o: OutPoint) => o.txHash + o.index;
+    const outPoint2withdrawalRequests = new Map(withdrawalRequests.map(c => [key(c.outPoint!), c]));
+    const withdrawalRequestGroups: WithdrawalRequestGroup[] = [];
+    for (const owner of owners) {
+        const { ownedDistance } = OwnedOwnerData.unpack(owner.data);
+        const index = hex(Number(owner.outPoint!.index) + ownedDistance);
+        const k = key({ ...owner.outPoint!, index });
+        const ownedWithdrawalRequest = outPoint2withdrawalRequests.get(k);
+
+        if (ownedWithdrawalRequest) {
+            withdrawalRequestGroups.push(Object.freeze({ owner, ownedWithdrawalRequest }));
+            outPoint2withdrawalRequests.delete(k);
+        } else {
+            unknowns.push(owner);
         }
     }
+    unknowns = unknowns.concat(Array.from(outPoint2withdrawalRequests.values()));
 
     return {
-        sudts,
-        receiptGroups: <ReceiptGroups>{
-            receipts,
-            capacities,
-            withdrawalRequests
-        },
+        udts,
+        receipts,
+        withdrawalRequestGroups,
         ickbDepositPool,
         notIckbs: unknowns
     };
-}
-
-function receiptOwned(receipts: Cell[]) {
-    const txHash2OwnedQuantity = new Map<Hash, number>();
-    for (const r of receipts) {
-        const { ownedQuantity, unspent } = ReceiptDataCodec.unpack(r.data);
-        if (ownedQuantity > 0) {
-            txHash2OwnedQuantity.set(r.outPoint!.txHash, ownedQuantity);
-        }
-        for (const { txHash, ownedQuantity } of unspent) {
-            txHash2OwnedQuantity.set(txHash, ownedQuantity);
-        }
-    }
-    return txHash2OwnedQuantity;
 }
 
 export function ickbDeposit(tx: TransactionSkeletonType, depositQuantity: number, header: I8Header) {
@@ -131,14 +124,14 @@ export function ickbDeposit(tx: TransactionSkeletonType, depositQuantity: number
 }
 
 export function ickbRequestWithdrawalFrom(tx: TransactionSkeletonType, ickbDepositPool: readonly I8Cell[]) {
-    return daoRequestWithdrawalFrom(tx, ickbDepositPool, ickbLogicScript());
+    return daoRequestWithdrawalFrom(tx, ickbDepositPool, ownedOwnerScript());
 }
 
 export function ickbRequestWithdrawalWith(
     tx: TransactionSkeletonType,
     ickbDepositPool: readonly I8Cell[],
     tipHeader: I8Header,
-    maxIckbWithdrawalAmount: BI,
+    maxIckbWithdrawalAmount: bigint,
     maxWithdrawalCells: number = Number.POSITIVE_INFINITY,
     minLock?: EpochSinceValue,
     maxLock?: EpochSinceValue,
@@ -146,7 +139,7 @@ export function ickbRequestWithdrawalWith(
     return daoRequestWithdrawalWith(
         tx,
         ickbDepositPool,
-        ickbLogicScript(),
+        ownedOwnerScript(),
         tipHeader,
         ickb2Ckb(maxIckbWithdrawalAmount, tipHeader),
         maxWithdrawalCells,
@@ -155,118 +148,109 @@ export function ickbRequestWithdrawalWith(
     );
 }
 
-export const errorOwnedReceiptMismatch = "Inputs contains a owned cell that do not match with a receipt";
-export function ickbSudtFundAdapter(
+export function ickbFundAdapter(
     assets: Assets,
     accountLock: I8Script,
-    sudts: readonly I8Cell[],
+    udts: readonly I8Cell[],
     tipHeader?: I8Header,
-    receiptGroups?: ReceiptGroups
+    receipts?: readonly I8Cell[],
+    withdrawalRequestGroups?: readonly WithdrawalRequestGroup[]
 ): Assets {
     const getDelta = (tx: TransactionSkeletonType) => ickbDelta(tx);
 
-    const addChange = (tx: TransactionSkeletonType) => {
+    const addChange = (tx: TransactionSkeletonType, minChange: bigint) => {
         const delta = getDelta(tx);
-        if (delta.lt(0)) {
+        if (delta < minChange) {
             return undefined;
         }
 
-        //Group output cells that the receipt has to account for
-        const ickbDeposits: Cell[] = [];
-        const ownedCells: Cell[] = [];
-        for (const cell of tx.outputs.filter((c) => scriptEq(c.cellOutput.lock, ickbLogicScript()))) {
-            if (isDaoDeposit(cell)) {
-                ickbDeposits.push(cell);
-            } else {
-                ownedCells.push(cell);
-            }
-        }
+        //Change cells
+        const cc: I8Cell[] = [];
 
-        //Maybe add an Owner Lock cell to enable later conversion from Receipt to iCKB
-        if (ickbDeposits.length > 0) {
-            const ownerLockCell = I8Cell.from({ lock: ickbLogicScript() })
-            tx = addCells(tx, "append", [], [ownerLockCell])
-            ownedCells.push(ownerLockCell);
-        }
-
-        //Maybe add unspent owned cells accounting
-        const inputReceipts = tx.inputs.filter((c) => scriptEq(c.cellOutput.type, ickbLogicScript()));
-        const txHash2OwnedQuantity = receiptOwned(inputReceipts.toArray());
-        for (const c of tx.inputs) {
-            if (!scriptEq(c.cellOutput.lock, ickbLogicScript()) || isDaoDeposit(c)) {
+        //Owned iCKB Withdrawal Requests for which need to be created an Owner cell
+        const ownedOwner = ownedOwnerScript();
+        for (const [index, c] of tx.outputs.entries()) {
+            if (!isDaoWithdrawalRequest(c) || !scriptEq(c.cellOutput.lock, ownedOwner)) {
                 continue;
             }
-            const txHash = c.outPoint!.txHash;
-            const n = txHash2OwnedQuantity.get(txHash);
-            if (n === undefined) {
-                throw Error(errorOwnedReceiptMismatch);
-            }
-            if (n > 1) {
-                txHash2OwnedQuantity.set(txHash, n - 1);
-            } else {
-                txHash2OwnedQuantity.delete(txHash);
-            }
-        }
-        const unspent = ([...txHash2OwnedQuantity.entries()] as [string, number][])
-            .map(([txHash, ownedQuantity]) => Object.freeze({ txHash, ownedQuantity }));
-
-        //Maybe add iCKB receipt cell
-        if (ownedCells.length > 0 || unspent.length > 0) {
-            const data = hexify(ReceiptDataCodec.pack({
-                unionId: unspent.length,
-                depositAmount: ickbDeposits.length > 0 ?
-                    BI.from(ickbDeposits[0].cellOutput.capacity)
-                        .sub(minimalCellCapacityCompatible(ickbDeposits[0]))
-                    : BI.from(0),
-                depositQuantity: ickbDeposits.length,
-                ownedQuantity: ownedCells.length,
-                unspent
+            const ownerIndex = tx.outputs.size + cc.length;
+            const ownedDistance = index - ownerIndex;
+            cc.push(I8Cell.from({
+                lock: accountLock,
+                type: ownedOwner,
+                data: hexify(OwnedOwnerData.pack({ ownedDistance }))
             }));
-
-            const receipt = I8Cell.from({ lock: accountLock, type: ickbLogicScript(), data });
-            tx = addCells(tx, "append", [], [receipt]);
         }
 
-        if (delta.eq(0)) {
-            return tx;
+        //Add receipts for iCKB Deposits
+        const ickbLogic = ickbLogicScript();
+        const depositAmount2Quantity = new Map<bigint, ReturnType<typeof ReceiptData.unpack>>();
+        for (const c of tx.outputs) {
+            if (!isDaoDeposit(c) || !scriptEq(c.cellOutput.lock, ickbLogic)) {
+                continue;
+            }
+
+            const usedCapacity = minimalCellCapacity(c, { validate: false });
+            const depositAmount = BigInt(c.cellOutput.capacity) - BigInt(usedCapacity);
+            let v = depositAmount2Quantity.get(depositAmount);
+            if (v) {
+                v.value.depositQuantity += 1;
+            } else {
+                depositAmount2Quantity.set(depositAmount, {
+                    type: "ReceiptDataV0",
+                    value: {
+                        depositQuantity: 1,
+                        depositAmount,
+                    }
+                });
+            }
+        }
+        for (const d of depositAmount2Quantity.values()) {
+            cc.push(I8Cell.from({
+                lock: accountLock,
+                type: ickbLogic,
+                data: hexify(ReceiptData.pack(d))
+            }));
         }
 
-        //Add SUDT change cell
-        const changeCell = I8Cell.from({
-            lock: accountLock,
-            type: ickbSudtType(),
-            data: hexify(Uint128LE.pack(delta))
-        });
-        return addCells(tx, "append", [], [changeCell]);
+        //Add UDT change cell
+        if (delta != 0n) {
+            cc.push(I8Cell.from({
+                lock: accountLock,
+                type: ickbUdtType(),
+                data: hexify(UdtData.pack({ udtAmount: delta }))
+            }));
+        }
+
+        //Append change cells to the transaction
+        return addCells(tx, "append", [], cc);
     }
-
 
     const addFunds: ((tx: TransactionSkeletonType) => TransactionSkeletonType)[] = [];
 
-    for (const ss of logSplit(sudts)) {
-        addFunds.push((tx: TransactionSkeletonType) => addCells(tx, "append", ss, []));
+    for (const uu of logSplit(udts)) {
+        addFunds.push((tx: TransactionSkeletonType) => addCells(tx, "append", uu, []));
     }
 
     const unavailableCells: I8Cell[] = [];
-    if (tipHeader && receiptGroups) {
+    if (tipHeader && receipts && withdrawalRequestGroups) {
         const tipEpoch = parseEpoch(tipHeader.epoch);
-        const { receipts, capacities, withdrawalRequests } = receiptGroups;
         const ripeWithdrawalRequests: I8Cell[] = [];
-        for (const wr of withdrawalRequests) {
-            const withdrawalEpoch = parseAbsoluteEpochSince(wr.cellOutput.type![since]);
+        const ripeOwners: I8Cell[] = [];
+        for (const { ownedWithdrawalRequest, owner } of withdrawalRequestGroups) {
+            const withdrawalEpoch = parseAbsoluteEpochSince(ownedWithdrawalRequest.cellOutput.type![since]);
             if (epochSinceCompare(tipEpoch, withdrawalEpoch) === -1) {
-                unavailableCells.push(wr);
+                unavailableCells.push(ownedWithdrawalRequest, owner);
             } else {
-                ripeWithdrawalRequests.push(wr);
+                ripeWithdrawalRequests.push(ownedWithdrawalRequest);
+                ripeOwners.push(owner);
             }
         }
 
-        if (ripeWithdrawalRequests.length == 0 && capacities.length == 0) {
-            unavailableCells.push(...receipts);
-        } else {
+        if (ripeWithdrawalRequests.length > 0) {
             addFunds.push((tx: TransactionSkeletonType) => {
                 tx = daoWithdrawFrom(tx, ripeWithdrawalRequests);
-                tx = addCells(tx, "append", [...receipts, ...capacities], []);
+                tx = addCells(tx, "append", ripeOwners, []);
                 return tx;
             });
         }
@@ -274,151 +258,94 @@ export function ickbSudtFundAdapter(
 
     const unavailableFunds = [TransactionSkeleton().update("inputs", i => i.push(...unavailableCells))];
 
-    return addAsset(assets, "ICKB_SUDT", getDelta, addChange, addFunds, unavailableFunds);
+    return addAsset(assets, "ICKB_UDT", getDelta, addChange, addFunds, unavailableFunds);
 }
 
 export function ickbDelta(tx: TransactionSkeletonType) {
-    let ickbDelta = BI.from(0);
+    const ickbUdt = ickbUdtType();
+    const ickbLogic = ickbLogicScript();
+    let ickbDelta = 0n;
     for (const c of tx.inputs) {
         //iCKB token
-        if (scriptEq(c.cellOutput.type, ickbSudtType())) {
-            ickbDelta = ickbDelta.add(Uint128LE.unpack(c.data));
+        if (scriptEq(c.cellOutput.type, ickbUdt)) {
+            ickbDelta += Uint128.unpack(c.data);
             continue;
         }
 
         //Withdrawal from iCKB pool of NervosDAO deposits
-        if (scriptEq(c.cellOutput.lock, ickbLogicScript()) && isDaoDeposit(c)) {
+        if (scriptEq(c.cellOutput.lock, ickbLogic) && isDaoDeposit(c)) {
             const header = (c as I8Cell).cellOutput.type![headerDeps][0];
-            const ckbUnoccupiedCapacity = BI.from(c.cellOutput.capacity).sub(minimalCellCapacityCompatible(c));
-            ickbDelta = ickbDelta.sub(ickbDepositValue(ckbUnoccupiedCapacity, header));
+            const ckbUnoccupiedCapacity = BigInt(c.cellOutput.capacity) - minimalCellCapacity(c);
+            ickbDelta -= ickbDepositValue(ckbUnoccupiedCapacity, header);
             continue;
         }
 
         //iCKB Receipt
-        if (scriptEq(c.cellOutput.type, ickbLogicScript())) {
+        if (scriptEq(c.cellOutput.type, ickbLogic)) {
             const header = (c as I8Cell).cellOutput.type![headerDeps][0];
-            const { depositQuantity, depositAmount } = ReceiptDataCodec.unpack(c.data);
-            ickbDelta = ickbDelta.add(ickbReceiptValue(depositQuantity, depositAmount, header));
+            const { depositQuantity, depositAmount } = ReceiptData.unpack(c.data).value;
+            ickbDelta += ickbReceiptValue(depositQuantity, depositAmount, header);
         }
     }
 
     for (const c of tx.outputs) {
         //iCKB token
-        if (scriptEq(c.cellOutput.type, ickbSudtType())) {
-            ickbDelta = ickbDelta.sub(Uint128LE.unpack(c.data));
+        if (scriptEq(c.cellOutput.type, ickbUdt)) {
+            ickbDelta -= Uint128.unpack(c.data);
         }
     }
 
     return ickbDelta;
 }
 
-export function ickbSudtType() {
-    return I8Script.from({ ...defaultScript("SUDT"), args: computeScriptHash(ickbLogicScript()) });
+export function ickbUdtType() {
+    return I8Script.from({ ...defaultScript("XUDT"), args: computeScriptHash(ickbLogicScript()) + "80000000" });
 }
 
 export function ickbLogicScript() {
     return defaultScript("ICKB_LOGIC");
 }
 
-const PositiveUint8 = createFixedBytesCodec<number, BIish>(
-    {
-        byteLength: Uint8.byteLength,
-        pack: (packable) => Uint8.pack(BI.from(-1).add(packable)),
-        unpack: (unpackable) => Uint8.unpack(unpackable) + 1,
-    },
-);
-
-const Uint48LE = createUintBICodec(6, true);
-
-export type PackableReceiptData = {
-    unionId: number,            //  4 bytes
-    depositAmount: BI,          //  6 bytes
-    depositQuantity: number,    //  1 byte
-    ownedQuantity: number,      //  1 byte
-    unspent: {
-        txHash: HexString,      //  32 bytes
-        ownedQuantity: number,  //  1 byte
-    }[]                         //  33 * unionId bytes
-};
-const newParametricReceiptDataCodec = (unspentLength: number) => {
-    const unspentCodec = struct(
-        {
-            txHash: Byte32,
-            ownedQuantity: PositiveUint8,
-        },
-        ["txHash", "ownedQuantity"]
-    );
-
-    const parametricUnspentCodec = array(unspentCodec, unspentLength);
-
-    return struct(
-        {
-            unionId: Uint32LE,
-            depositAmount: Uint48LE,
-            depositQuantity: Uint8,
-            ownedQuantity: Uint8,
-            unspent: parametricUnspentCodec
-        },
-        ["unionId", "depositAmount", "depositQuantity", "ownedQuantity", "unspent"]
-    );
+export function ownedOwnerScript() {
+    return defaultScript("OWNED_OWNER");
 }
-export const errorUnspentLengthMismatch = "Union id and unspent length are different";
-const N = 255;
-const receiptDataCodecs = Object.freeze(Array.from({ length: N + 1 }, (_, i) => newParametricReceiptDataCodec(i)));
-export const ReceiptDataCodec = createBytesCodec<PackableReceiptData>({
-    pack: (packable) => {
-        const n = packable.unspent.length;
-        if (packable.unionId !== n) {
-            throw Error(errorUnspentLengthMismatch);
-        }
-        return (n <= N ? receiptDataCodecs[n] : newParametricReceiptDataCodec(n)).pack(packable);
-    },
-    unpack: (packed) => {
-        const n = (packed.length - receiptDataCodecs[0].byteLength) / 33;
-        const o = (n <= N ? receiptDataCodecs[n] : newParametricReceiptDataCodec(n)).unpack(packed);
-        if (o.unionId !== n) {
-            throw Error(errorUnspentLengthMismatch);
-        }
-        return o;
-    }
-});
 
-export const ICKB_SOFT_CAP_PER_DEPOSIT = parseUnit("100000", "ckb");
-export function ickbDepositValue(ckbUnoccupiedCapacity: BI, header: I8Header) {
+export const ICKB_SOFT_CAP_PER_DEPOSIT = 100000n * ckbInShannons;
+export function ickbDepositValue(ckbUnoccupiedCapacity: bigint, header: I8Header) {
     let ickbAmount = ckb2Ickb(ckbUnoccupiedCapacity, header, false);
-    if (ICKB_SOFT_CAP_PER_DEPOSIT.lt(ickbAmount)) {
+    if (ICKB_SOFT_CAP_PER_DEPOSIT < ickbAmount) {
         // Apply a 10% discount for the amount exceeding the soft iCKB cap per deposit.
-        ickbAmount = ickbAmount.sub(ickbAmount.sub(ICKB_SOFT_CAP_PER_DEPOSIT).div(10));
+        ickbAmount -= (ickbAmount - ICKB_SOFT_CAP_PER_DEPOSIT) / 10n;
     }
 
     return ickbAmount;
 }
 
-export function ickbReceiptValue(receiptCount: BIish, receiptAmount: BI, header: I8Header) {
-    return ickbDepositValue(receiptAmount, header).mul(receiptCount);
+export function ickbReceiptValue(receiptCount: number, receiptAmount: bigint, header: I8Header) {
+    return ickbDepositValue(receiptAmount, header) * BigInt(receiptCount);
 }
 
 export function ckbSoftCapPerDeposit(header: I8Header) {
     return ickb2Ckb(ICKB_SOFT_CAP_PER_DEPOSIT, header);
 }
 
-export function ckb2Ickb(ckbAmount: BI, header: I8Header, accountDepositCapacity = true) {
-    const { ckbMultiplier, sudtMultiplier } = ickbExchangeRatio(header, accountDepositCapacity);
-    return ckbAmount.mul(ckbMultiplier).div(sudtMultiplier);
+export function ckb2Ickb(ckbAmount: bigint, header: I8Header, accountDepositCapacity = true) {
+    const { ckbMultiplier, udtMultiplier } = ickbExchangeRatio(header, accountDepositCapacity);
+    return ckbAmount * ckbMultiplier / udtMultiplier;
 }
 
-export function ickb2Ckb(sudtAmount: BI, header: I8Header, accountDepositCapacity = true) {
-    const { ckbMultiplier, sudtMultiplier } = ickbExchangeRatio(header, accountDepositCapacity);
-    return sudtAmount.mul(sudtMultiplier).div(ckbMultiplier);
+export function ickb2Ckb(udtAmount: bigint, header: I8Header, accountDepositCapacity = true) {
+    const { ckbMultiplier, udtMultiplier } = ickbExchangeRatio(header, accountDepositCapacity);
+    return udtAmount * udtMultiplier / ckbMultiplier;
 }
 
-const AR_0 = BI.from("10000000000000000");
-const depositCapacityMultiplier = parseUnit("82", "ckb").mul(AR_0).div(ICKB_SOFT_CAP_PER_DEPOSIT);
+const AR_0 = 10000000000000000n;
+const depositCapacityMultiplier = 82n * ckbInShannons * AR_0 / ICKB_SOFT_CAP_PER_DEPOSIT;
 export function ickbExchangeRatio(header: I8Header, accountDepositCapacity = true) {
     const daoData = extractDaoDataCompatible(header.dao);
-    const AR_m = daoData["ar"];
+    const AR_m = daoData["ar"].toBigInt();
     return {
         ckbMultiplier: AR_0,
-        sudtMultiplier: accountDepositCapacity ? AR_m.add(depositCapacityMultiplier) : AR_m
+        udtMultiplier: accountDepositCapacity ? AR_m + depositCapacityMultiplier : AR_m
     }
 }

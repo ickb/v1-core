@@ -1,0 +1,6 @@
+{
+    "objectKeyFormat": "camelcase",
+    "prepend": "import { Boolean, Uint8, Uint32, Uint64, Uint128, Int32, OutPoint } from `./codec.js`",
+    "schemaDir": "schemas",
+    "outDir": "src"
+}
