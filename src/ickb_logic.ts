@@ -5,10 +5,10 @@ import { hexify } from "@ckb-lumos/codec/lib/bytes.js";
 import { extractDaoDataCompatible } from "@ckb-lumos/common-scripts/lib/dao.js";
 import { TransactionSkeleton, type TransactionSkeletonType, minimalCellCapacity } from "@ckb-lumos/helpers";
 import {
-    type Assets, I8Cell, I8Header, I8Script, addAsset, addCells, daoDeposit, daoRequestWithdrawalFrom,
-    daoRequestWithdrawalWith, daoSifter, daoWithdrawFrom, defaultScript, epochSinceCompare, errorUndefinedBlockNumber,
-    headerDeps, isDaoDeposit, logSplit, scriptEq, since, typeSifter, isDaoWithdrawalRequest, lockExpanderFrom, hex,
-    ckbInShannons, Uint128
+    addAsset, type Assets, I8Cell, I8Header, I8Script, addCells, daoDeposit, daoRequestWithdrawalFrom,
+    daoRequestWithdrawalWith, daoSifter, daoWithdrawFrom, defaultScript, epochSinceCompare,
+    errorUndefinedBlockNumber, headerDeps, isDaoDeposit, scriptEq, since, typeSifter, isDaoWithdrawalRequest,
+    lockExpanderFrom, hex, ckbInShannons, Uint128, addAssetsFunds
 } from "@ickb/lumos-utils";
 import { OwnedOwnerData, ReceiptData, UdtData } from "./encoding.js";
 
@@ -148,117 +148,123 @@ export function ickbRequestWithdrawalWith(
     );
 }
 
-export function ickbFundAdapter(
+export const ickbUdtMark = "ICKB_UDT";
+
+export function addIckbUdtAsset(
     assets: Assets,
     accountLock: I8Script,
-    udts: readonly I8Cell[],
-    tipHeader?: I8Header,
-    receipts?: readonly I8Cell[],
-    withdrawalRequestGroups?: readonly WithdrawalRequestGroup[]
 ): Assets {
     const getDelta = (tx: TransactionSkeletonType) => ickbDelta(tx);
 
-    const addChange = (tx: TransactionSkeletonType, minChange: bigint) => {
-        const delta = getDelta(tx);
-        if (delta < minChange) {
-            return undefined;
-        }
-
-        //Change cells
-        const cc: I8Cell[] = [];
-
-        //Owned iCKB Withdrawal Requests for which need to be created an Owner cell
-        const ownedOwner = ownedOwnerScript();
-        for (const [index, c] of tx.outputs.entries()) {
-            if (!isDaoWithdrawalRequest(c) || !scriptEq(c.cellOutput.lock, ownedOwner)) {
-                continue;
-            }
-            const ownerIndex = tx.outputs.size + cc.length;
-            const ownedDistance = index - ownerIndex;
-            cc.push(I8Cell.from({
-                lock: accountLock,
-                type: ownedOwner,
-                data: hexify(OwnedOwnerData.pack({ ownedDistance }))
-            }));
-        }
-
-        //Add receipts for iCKB Deposits
-        const ickbLogic = ickbLogicScript();
-        const depositAmount2Quantity = new Map<bigint, ReturnType<typeof ReceiptData.unpack>>();
-        for (const c of tx.outputs) {
-            if (!isDaoDeposit(c) || !scriptEq(c.cellOutput.lock, ickbLogic)) {
-                continue;
+    return addAsset(assets, ickbUdtMark, getDelta, {
+        //Handler of UDT change cells
+        DEFAULT: (tx: TransactionSkeletonType) => {
+            const delta = getDelta(tx);
+            if (delta < 0n) {
+                return undefined;
             }
 
-            const usedCapacity = minimalCellCapacity(c, { validate: false });
-            const depositAmount = BigInt(c.cellOutput.capacity) - BigInt(usedCapacity);
-            let v = depositAmount2Quantity.get(depositAmount);
-            if (v) {
-                v.value.depositQuantity += 1;
-            } else {
-                depositAmount2Quantity.set(depositAmount, {
-                    type: "ReceiptDataV0",
-                    value: {
-                        depositQuantity: 1,
-                        depositAmount,
-                    }
+            if (delta > 0n) {
+                const c = I8Cell.from({
+                    lock: accountLock,
+                    type: ickbUdtType(),
+                    data: hexify(UdtData.pack({ udtAmount: delta }))
                 });
+                return addCells(tx, "append", [], [c]);
             }
-        }
-        for (const d of depositAmount2Quantity.values()) {
-            cc.push(I8Cell.from({
-                lock: accountLock,
-                type: ickbLogic,
-                data: hexify(ReceiptData.pack(d))
-            }));
-        }
 
-        //Add UDT change cell
-        if (delta != 0n) {
-            cc.push(I8Cell.from({
-                lock: accountLock,
-                type: ickbUdtType(),
-                data: hexify(UdtData.pack({ udtAmount: delta }))
-            }));
+            return tx;
+        },
+
+        //Handler of Owned iCKB Withdrawal Requests for which need to be created an Owner cell
+        OWNED_WITHDRAWAL_REQUESTS: (tx: TransactionSkeletonType) => {
+            const cc: I8Cell[] = [];
+            const ownedOwner = ownedOwnerScript();
+            for (const [index, c] of tx.outputs.entries()) {
+                if (!isDaoWithdrawalRequest(c) || !scriptEq(c.cellOutput.lock, ownedOwner)) {
+                    continue;
+                }
+                const ownerIndex = tx.outputs.size + cc.length;
+                const ownedDistance = index - ownerIndex;
+                cc.push(I8Cell.from({
+                    lock: accountLock,
+                    type: ownedOwner,
+                    data: hexify(OwnedOwnerData.pack({ ownedDistance }))
+                }));
+            }
+            return cc.length > 0 ? addCells(tx, "append", [], cc) : tx;
+        },
+
+        //Handler of receipts for iCKB Deposits
+        RECEIPT_DEPOSITS: (tx: TransactionSkeletonType) => {
+            const ickbLogic = ickbLogicScript();
+            const depositAmount2Quantity = new Map<bigint, ReturnType<typeof ReceiptData.unpack>>();
+            for (const c of tx.outputs) {
+                if (!isDaoDeposit(c) || !scriptEq(c.cellOutput.lock, ickbLogic)) {
+                    continue;
+                }
+
+                const usedCapacity = minimalCellCapacity(c, { validate: false });
+                const depositAmount = BigInt(c.cellOutput.capacity) - BigInt(usedCapacity);
+                let v = depositAmount2Quantity.get(depositAmount);
+                if (v) {
+                    v.value.depositQuantity += 1;
+                } else {
+                    depositAmount2Quantity.set(depositAmount, {
+                        type: "ReceiptDataV0",
+                        value: {
+                            depositQuantity: 1,
+                            depositAmount,
+                        }
+                    });
+                }
+            }
+
+            const cc: I8Cell[] = [];
+            for (const d of depositAmount2Quantity.values()) {
+                cc.push(I8Cell.from({
+                    lock: accountLock,
+                    type: ickbLogic,
+                    data: hexify(ReceiptData.pack(d))
+                }));
+            }
+            return cc.length > 0 ? addCells(tx, "append", [], cc) : tx;
         }
+    });
+}
 
-        //Append change cells to the transaction
-        return addCells(tx, "append", [], cc);
-    }
-
+export function addWithdrawalRequestGroups(
+    assets: Assets,
+    withdrawalRequestGroups: readonly WithdrawalRequestGroup[],
+    tipHeader: I8Header,
+) {
     const addFunds: ((tx: TransactionSkeletonType) => TransactionSkeletonType)[] = [];
+    const unavailableCells: I8Cell[] = [];
 
-    for (const uu of logSplit(udts)) {
-        addFunds.push((tx: TransactionSkeletonType) => addCells(tx, "append", uu, []));
+    const tipEpoch = parseEpoch(tipHeader.epoch);
+    const ripeWithdrawalRequests: I8Cell[] = [];
+    const ripeOwners: I8Cell[] = [];
+    for (const { ownedWithdrawalRequest, owner } of withdrawalRequestGroups) {
+        const withdrawalEpoch = parseAbsoluteEpochSince(ownedWithdrawalRequest.cellOutput.type![since]);
+        if (epochSinceCompare(tipEpoch, withdrawalEpoch) === -1) {
+            unavailableCells.push(ownedWithdrawalRequest, owner);
+        } else {
+            ripeWithdrawalRequests.push(ownedWithdrawalRequest);
+            ripeOwners.push(owner);
+        }
     }
 
-    const unavailableCells: I8Cell[] = [];
-    if (tipHeader && receipts && withdrawalRequestGroups) {
-        const tipEpoch = parseEpoch(tipHeader.epoch);
-        const ripeWithdrawalRequests: I8Cell[] = [];
-        const ripeOwners: I8Cell[] = [];
-        for (const { ownedWithdrawalRequest, owner } of withdrawalRequestGroups) {
-            const withdrawalEpoch = parseAbsoluteEpochSince(ownedWithdrawalRequest.cellOutput.type![since]);
-            if (epochSinceCompare(tipEpoch, withdrawalEpoch) === -1) {
-                unavailableCells.push(ownedWithdrawalRequest, owner);
-            } else {
-                ripeWithdrawalRequests.push(ownedWithdrawalRequest);
-                ripeOwners.push(owner);
-            }
-        }
-
-        if (ripeWithdrawalRequests.length > 0) {
-            addFunds.push((tx: TransactionSkeletonType) => {
-                tx = daoWithdrawFrom(tx, ripeWithdrawalRequests);
-                tx = addCells(tx, "append", ripeOwners, []);
-                return tx;
-            });
-        }
+    if (ripeWithdrawalRequests.length > 0) {
+        addFunds.push((tx: TransactionSkeletonType) => {
+            tx = daoWithdrawFrom(tx, ripeWithdrawalRequests);
+            tx = addCells(tx, "append", ripeOwners, []);
+            return tx;
+        });
     }
 
     const unavailableFunds = [TransactionSkeleton().update("inputs", i => i.push(...unavailableCells))];
 
-    return addAsset(assets, "ICKB_UDT", getDelta, addChange, addFunds, unavailableFunds);
+    return addAssetsFunds(assets, addFunds, unavailableFunds);
 }
 
 export function ickbDelta(tx: TransactionSkeletonType) {
