@@ -2,287 +2,306 @@ import { hexify } from "@ckb-lumos/codec/lib/bytes.js";
 import { TransactionSkeleton, type TransactionSkeletonType } from "@ckb-lumos/helpers";
 import type { Cell, OutPoint } from "@ckb-lumos/base";
 import {
-    type Assets, I8Cell, I8Script, addAssetsFunds, addCells, defaultScript,
-    i8ScriptPadding, typeSifter, lockExpanderFrom, I8OutPoint, logSplit, hex
+    type Assets, I8Cell, I8Script, addAssetsFunds, addCells, defaultScript, typeSifter,
+    lockExpanderFrom, I8OutPoint, logSplit, hex, i8ScriptPadding
 } from "@ickb/lumos-utils";
 import { ickbUdtType } from "./ickb_logic.js";
 import { OrderData } from "./codec.js";
-
-export type Order = {
-    cell: I8Cell,
-    master: { outPoint: I8OutPoint },
-};
-
-export type BaseInfo = {
-    isUdtToCkb: boolean;
-    ckbMultiplier: bigint;
-    udtMultiplier: bigint;
-    logMinMatch: number;
-    udtAmount?: bigint;
-    ckbAmount?: bigint;
-}
-
-export type Info = Required<BaseInfo> & {
-    ckbMinMatch: bigint;
-    udtMinMatch: bigint;
-};
-
-export type OpenOrder = Order & Info;
 
 export type MyOrder = Order & {
     master: I8Cell,
 };
 
-export type MyOpenOrder = OpenOrder & {
-    master: I8Cell,
+export type Order = {
+    cell: I8Cell,
+    master: { outPoint: I8OutPoint },
+    info: Required<BaseOrderInfo> & {
+        // Computed properties
+        ckbMinMatch: bigint;
+        isCkb2UdtMatchable: boolean;
+        isUdt2CkbMatchable: boolean;
+        isMatchable: boolean;
+    }
 };
 
+export type BaseOrderInfo = {
+    ckbToUdt: OrderRatio;
+    udtToCkb: OrderRatio;
+    ckbMinMatchLog: number;
+    udtAmount?: bigint;
+    ckbAmount?: bigint;
+}
+
+export type OrderRatio = {
+    ckbMultiplier: bigint;
+    udtMultiplier: bigint;
+}
+
+export function orderSifter(
+    inputs: readonly Cell[],
+    accountLockExpander: (c: Cell) => I8Script | undefined,
+    udtType = ickbUdtType(),
+) {
+    const orderScript = limitOrderScript();
+    let { types, notTypes: unknowns } = typeSifter(inputs, udtType, lockExpanderFrom(orderScript));
+    let masters: I8Cell[] = [];
+    ({ types: masters, notTypes: unknowns } = typeSifter(unknowns, orderScript, accountLockExpander));
+    const key = (o: OutPoint) => o.txHash + o.index;
+    const outPoint2Master = new Map(masters.map(c => [key(c.outPoint!), c as MyOrder["master"]]));
+
+    const orders: Order[] = [];
+    const myOrders: MyOrder[] = [];
+    for (const cell of types) {
+        const o = OrderData.unpack(cell.data);
+        const { ckbToUdt: c2u, udtToCkb: u2c, ckbMinMatchLog } = o.value.orderInfo;
+        const ckbToUdt = normalizeRatio(c2u);
+        const udtToCkb = normalizeRatio(u2c);
+        const ckbMinMatch = 1n << BigInt(normalizeCkbMinMatchLog(ckbMinMatchLog));
+        const udtAmount = o.udtAmount;
+        const ckbAmount = BigInt(cell.cellOutput.capacity);
+        const ckbUnused = ckbAmount > ckbOrderOccupiedMax ? ckbAmount - ckbOrderOccupiedMax : 0n;
+        const isCkb2UdtMatchable = (ckbToUdt !== normalizedInvalidRatio && ckbUnused > 0n);
+        const isUdt2CkbMatchable = (udtToCkb !== normalizedInvalidRatio && udtAmount > 0n);
+        const isMatchable = isCkb2UdtMatchable || isUdt2CkbMatchable;
+
+        let info: Order["info"] = Object.freeze({
+            ckbToUdt,
+            udtToCkb,
+            ckbMinMatchLog,
+            ckbMinMatch,
+            udtAmount,
+            ckbAmount,
+            isCkb2UdtMatchable,
+            isUdt2CkbMatchable,
+            isMatchable,
+        });
+
+        const masterOutPoint = I8OutPoint.from(o.type === "MintOrderData" ? {
+            txHash: cell.outPoint!.txHash,
+            index: hex(Number(cell.outPoint!.index) + o.value.masterDistance)
+        } : o.value.masterOutpoint);
+        const k = key(masterOutPoint);
+        const master = outPoint2Master.get(k);
+        if (master) {
+            // Order owned by the Account
+            outPoint2Master.delete(k);
+            myOrders.push(Object.freeze({
+                cell, master, info
+            }));
+        } else {
+            orders.push(Object.freeze({
+                cell,
+                master: Object.freeze({ outPoint: masterOutPoint }),
+                info
+            }));
+        }
+    }
+
+    for (const c of outPoint2Master.values()) {
+        unknowns.push(c);
+    }
+
+    return {
+        myOrders,
+        orders,
+        notOrders: unknowns
+    };
+}
+
+export function addOrders(assets: Assets, myOrders: readonly MyOrder[]) {
+    const matchable: MyOrder[] = [];
+    const completed: MyOrder[] = [];
+    for (const o of myOrders) {
+        if (o.info.isMatchable) {
+            matchable.push(o);
+        } else {
+            completed.push(o);
+        }
+    }
+
+    const addFunds: ((tx: TransactionSkeletonType) => TransactionSkeletonType)[] = [];
+    for (const oo of logSplit(completed)) {
+        addFunds.push((tx: TransactionSkeletonType) => orderMelt(tx, ...oo));
+    }
+
+    const unavailableFunds = [
+        TransactionSkeleton()
+            .update("inputs", i => i.concat(matchable.flatMap(c => [c.cell, c.master])))
+    ];
+
+    return addAssetsFunds(assets, addFunds, unavailableFunds)
+}
+
+export const ckbMinMatchLogDefault = 40; // ~ 100 CKB
+
+export function orderMint(
+    tx: TransactionSkeletonType,
+    info: BaseOrderInfo,//it will use way more CKB than expressed in ckbAmount
+    accountLock: I8Script,
+    udtType = ickbUdtType(),
+) {
+    const { master, order } = orderNew(info, accountLock, udtType);
+    return addCells(tx, "append", [], [master, order]);
+}
+
+export const errorInvalidRatio = "Order ratio are invalid";
+export function orderNew(
+    info: BaseOrderInfo,//it will use way more CKB than expressed in ckbAmount
+    accountLock: I8Script,
+    udtType = ickbUdtType(),
+) {
+    const orderScript = limitOrderScript();
+    const ckbToUdt = normalizeRatio(info.ckbToUdt);
+    const udtToCkb = normalizeRatio(info.udtToCkb);
+    const ckbMinMatchLog = normalizeCkbMinMatchLog(info.ckbMinMatchLog);
+    info = {
+        ...info,
+        ckbToUdt,
+        udtToCkb,
+        ckbMinMatchLog,
+    };
+
+    if (ckbToUdt === normalizedInvalidRatio && udtToCkb === normalizedInvalidRatio) {
+        throw Error(errorInvalidRatio);
+    }
+
+    // Check that if we convert from ckb to udt and then back from udt to ckb, it doesn't lose value.
+    if (ckbToUdt.ckbMultiplier * udtToCkb.udtMultiplier < ckbToUdt.udtMultiplier * udtToCkb.ckbMultiplier) {
+        throw Error(errorInvalidRatio);
+    }
+
+    const master = I8Cell.from({
+        lock: accountLock,
+        type: orderScript
+    });
+
+    let order = I8Cell.from({
+        lock: orderScript,
+        type: udtType,
+        data: hexify(OrderData.pack({
+            udtAmount: info.udtAmount ?? 0n,
+            type: "MintOrderData",
+            value: {
+                masterDistance: -1,
+                orderInfo: info,
+            }
+        }))
+    });
+
+    if (info.ckbAmount) {
+        order = I8Cell.from({
+            ...order,
+            capacity: hex(BigInt(order.cellOutput.capacity) + info.ckbAmount),
+        });
+    }
+
+    return { master, order }
+}
+
+
+export function orderMatch(
+    tx: TransactionSkeletonType,
+    o: Order,
+    isCkb2Udt: boolean,
+    ckbAllowance: bigint | undefined,
+    udtAllowance: bigint | undefined
+) {
+    const { match } = orderSatisfy(o, isCkb2Udt, ckbAllowance, udtAllowance);
+    return addCells(tx, "append", [o.cell], [match]);
+}
+
+export const errorOrderNonMatchable = "The order cannot be matched in the specified direction";
 export const errorCkbAllowanceTooLow = "Not enough ckb allowance to partially fulfill a limit order";
 export const errorUdtAllowanceTooLow = "Not enough UDT allowance to partially fulfill a limit order";
-export const errorTerminalLockNotFound = "Not found an input cell with terminal lock in the transaction";
-export function limitOrder(udtType: I8Script = i8ScriptPadding) {
-    if (udtType == i8ScriptPadding) {
-        udtType = ickbUdtType();
-    }
-    const orderScript = limitOrderScript();
-
-    function create(
-        tx: TransactionSkeletonType,
-        o: BaseInfo,//it will use way more CKB than expressed in ckbAmount
-        accountLock: I8Script,
-    ) {
-        const m = I8Cell.from({
-            lock: accountLock,
-            type: orderScript
-        });
-        let c = I8Cell.from({
-            lock: orderScript,
-            type: udtType,
-            data: hexify(OrderData.pack({
-                udtAmount: o.udtAmount ?? 0,
-                type: "MintOrderData",
-                value: {
-                    masterDistance: -1,
-                    orderInfo: o,
-                }
-            }))
-        });
-
-        if (o.ckbAmount) {
-            c = I8Cell.from({
-                ...c,
-                capacity: hex(BigInt(c.cellOutput.capacity) + o.ckbAmount),
-            });
+export function orderSatisfy(
+    o: Order,
+    isCkb2Udt: boolean,
+    ckbAllowance: bigint = 1n << 64n,
+    udtAllowance: bigint = 1n << 128n
+) {
+    let ckbMultiplier: bigint, udtMultiplier: bigint;
+    if (isCkb2Udt) {
+        if (!o.info.isCkb2UdtMatchable) {
+            throw Error(errorOrderNonMatchable);
         }
-
-        return addCells(tx, "append", [], [m, c]);
+        ({ ckbMultiplier, udtMultiplier } = o.info.ckbToUdt);
+    } else {
+        if (!o.info.isUdt2CkbMatchable) {
+            throw Error(errorOrderNonMatchable);
+        }
+        ({ ckbMultiplier, udtMultiplier } = o.info.udtToCkb);
     }
+    let { ckbAmount: ckbIn, udtAmount: udtIn, ckbMinMatch } = o.info;
 
-    function match(
-        tx: TransactionSkeletonType,
-        o: OpenOrder,
-        ckbAllowance: bigint | undefined,
-        udtAllowance: bigint | undefined
-    ) {
-        const { match } = satisfy(o, ckbAllowance, udtAllowance);
-        return addCells(tx, "append", [o.cell], [match]);
-    }
-
-    function satisfy(
-        o: OpenOrder,
-        ckbAllowance: bigint = 1n << 64n,
-        udtAllowance: bigint = 1n << 128n
-    ) {
+    const result = (ckbOut: bigint, udtOut: bigint, isFulfilled: boolean) => {
         let match = I8Cell.from({
-            lock: orderScript,
-            type: udtType,
-            data: hexify(OrderData.pack({
-                udtAmount: 0n,
-                type: "FulfillOrderData",
-                value: {
-                    masterOutpoint: o.master.outPoint
-                }
-            }))
-        });
-
-        // Try to fulfill the order completely
-        let udtFulfilled: bigint;
-        let ckbFulfilled: bigint;
-        let isFulfilled = true;
-        if (o.isUdtToCkb) {
-            udtFulfilled = 0n;
-            ckbFulfilled = calculate(o.udtMultiplier, o.ckbMultiplier, o.udtAmount, o.ckbAmount, udtFulfilled);
-
-            if (ckbFulfilled - o.ckbAmount <= ckbAllowance) {
-                match = I8Cell.from({
-                    ...match,
-                    capacity: hex(ckbFulfilled),
-                });
-
-                return { match, isFulfilled };
-            }
-        } else {
-            ckbFulfilled = BigInt(match.cellOutput.capacity);
-            udtFulfilled = calculate(o.ckbMultiplier, o.udtMultiplier, o.ckbAmount, o.udtAmount, ckbFulfilled);
-
-            if (udtFulfilled - o.udtAmount <= udtAllowance) {
-                match = I8Cell.from({
-                    ...match,
-                    data: hexify(OrderData.pack({
-                        udtAmount: udtFulfilled,
-                        type: "FulfillOrderData",
-                        value: {
-                            masterOutpoint: o.master.outPoint
-                        }
-                    }))
-                });
-
-                return { match, isFulfilled };
-            }
-        }
-
-        // Allowance limits the order fulfillment, so the output cell is a still a limit order
-        isFulfilled = false;
-        let ckbOut: bigint;
-        let udtOut: bigint;
-        if (o.isUdtToCkb) {
-            // DoS prevention: o.ckbMinMatch CKB is the minimum partial match.
-            // Additionally, remaining UDT must be at least o.udtMinMatch.
-            if (ckbAllowance < o.ckbMinMatch || o.udtAmount < 2n * o.udtMinMatch) {
-                throw Error(errorCkbAllowanceTooLow);
-            }
-            let ckbOut0 = o.ckbAmount + ckbAllowance;
-            let ckbOut1 = ckbFulfilled - o.ckbMinMatch;
-            ckbOut = ckbOut0 < ckbOut1 ? ckbOut0 : ckbOut1;
-            udtOut = calculate(o.ckbMultiplier, o.udtMultiplier, o.ckbAmount, o.udtAmount, ckbOut);
-        } else {
-            // DOS prevention: o.udtMinMatch is the minimum partial match.
-            // Additionally, remaining CKB must be at least o.ckbMinMatch
-            if (udtAllowance < o.udtMinMatch || o.ckbAmount - ckbFulfilled < 2n * o.ckbMinMatch) {
-                throw Error(errorUdtAllowanceTooLow);
-            }
-            let udtOut0 = o.udtAmount + udtAllowance;
-            let udtOut1 = udtFulfilled - o.udtMinMatch;
-            udtOut = udtOut0 < udtOut1 ? udtOut0 : udtOut1;
-            ckbOut = calculate(o.udtMultiplier, o.ckbMultiplier, o.udtAmount, o.ckbAmount, udtOut);
-        }
-
-        match = I8Cell.from({
-            lock: orderScript,
-            type: udtType,
+            ...o.cell.cellOutput,
             capacity: hex(ckbOut),
             data: hexify(OrderData.pack({
                 udtAmount: udtOut,
                 type: "MatchOrderData",
                 value: {
                     masterOutpoint: o.master.outPoint,
-                    orderInfo: o
+                    orderInfo: o.info,
                 }
             }))
         });
         return { match, isFulfilled };
     }
 
-    function melt(tx: TransactionSkeletonType, ...oo: MyOrder[]) {
-        return addCells(tx, "append", oo.flatMap((o) => [o.cell, o.master]), []);
+    // Try to fulfill the order completely;
+    let isFulfilled = true;
+    if (isCkb2Udt) {
+        let ckbOut = BigInt(result(0n, 0n, isFulfilled).match.cellOutput.capacity);
+        let udtOut = calculate(ckbMultiplier, udtMultiplier, ckbIn, udtIn, ckbOut);
+        if (udtIn + udtAllowance >= udtOut) {
+            return result(ckbOut, udtOut, isFulfilled);
+        }
+    } else {
+        let udtOut = 0n;
+        let ckbOut = calculate(udtMultiplier, ckbMultiplier, udtIn, ckbIn, udtOut);
+        if (ckbIn + ckbAllowance >= ckbOut) {
+            return result(ckbOut, udtOut, isFulfilled);
+        }
     }
 
-    function sifter(
-        inputs: readonly Cell[],
-        accountLockExpander: (c: Cell) => I8Script | undefined
-    ) {
-        let { types: orders, notTypes: unknowns } = typeSifter(inputs, udtType, lockExpanderFrom(orderScript));
-        let masters: I8Cell[] = [];
-        ({ types: masters, notTypes: unknowns } = typeSifter(unknowns, orderScript, accountLockExpander));
-        const key = (o: OutPoint) => o.txHash + o.index;
-        const outPoint2Master = new Map(masters.map(c => [key(c.outPoint!), c]));
-
-        const ckb2UdtOrders: OpenOrder[] = [];
-        const udt2CkbOrders: OpenOrder[] = [];
-        const completedOrders: Order[] = [];
-        const myCkb2UdtOrders: MyOpenOrder[] = [];
-        const myUdt2CkbOrders: MyOpenOrder[] = [];
-        const myCompletedOrders: MyOrder[] = [];
-        for (const cell of orders) {
-            const o = OrderData.unpack(cell.data);
-
-            let info = undefined;
-            if ("orderInfo" in o.value) {
-                info = o.value.orderInfo;
-                const ckbMinMatch = 1n << BigInt(Math.min(info.logMinMatch, 64));
-                const udtMinMatch = (ckbMinMatch * info.ckbMultiplier + info.udtMultiplier - 1n) / info.udtMultiplier;
-                const udtAmount = o.udtAmount;
-                const ckbAmount = BigInt(cell.cellOutput.capacity);
-                info = { ...info, ckbMinMatch, udtMinMatch, udtAmount, ckbAmount };
-            }
-
-            const masterOutPoint = I8OutPoint.from(o.type === "MintOrderData" ? {
-                txHash: cell.outPoint!.txHash,
-                index: hex(Number(cell.outPoint!.index) + o.value.masterDistance)
-            } : o.value.masterOutpoint);
-            const k = key(masterOutPoint);
-            const master = outPoint2Master.get(k) ?? { outPoint: masterOutPoint };
-            const order = Object.freeze({
-                cell, master, info
-            });
-
-            if ("cellOutput" in master) {
-                // Order owned by the Account
-                outPoint2Master.delete(k);
-                if (!info) {
-                    myCompletedOrders.push(order as any);
-                } else if (info.isUdtToCkb) {
-                    myUdt2CkbOrders.push(order as any);
-                } else {
-                    myCkb2UdtOrders.push(order as any);
-                }
-            } else {
-                if (!info) {
-                    completedOrders.push(order as any);
-                } else if (info.isUdtToCkb) {
-                    udt2CkbOrders.push(order as any);
-                } else {
-                    ckb2UdtOrders.push(order as any);
-                }
-            }
+    // Allowance limits the order fulfillment
+    isFulfilled = false;
+    if (isCkb2Udt) {
+        let udtOut = udtIn + udtAllowance;
+        let ckbOut = calculate(udtMultiplier, ckbMultiplier, udtIn, ckbIn, udtOut);
+        // DOS prevention: ckbMinMatch is the minimum partial match.
+        if (ckbIn < ckbOut + ckbMinMatch) {
+            throw Error(errorUdtAllowanceTooLow);
         }
-
-        for (const c of outPoint2Master.values()) {
-            unknowns.push(c);
+        return result(ckbOut, udtOut, isFulfilled);
+    } else {
+        let ckbOut = ckbIn + ckbAllowance;
+        let udtOut = calculate(ckbMultiplier, udtMultiplier, ckbIn, udtIn, ckbOut);
+        // DoS prevention: the equivalent of ckbMinMatch is the minimum partial match.
+        if (udtIn * udtMultiplier > udtOut * udtMultiplier + ckbMinMatch * ckbMultiplier) {
+            throw Error(errorUdtAllowanceTooLow);
         }
-
-        return {
-            ckb2UdtOrders,
-            udt2CkbOrders,
-            completedOrders,
-            myCkb2UdtOrders,
-            myUdt2CkbOrders,
-            myCompletedOrders,
-            notOrders: unknowns
-        };
+        return result(ckbOut, udtOut, isFulfilled);
     }
+}
 
-    function fundAdapter(
-        assets: Assets,
-        orders: ReturnType<typeof sifter>
-    ): Assets {
-        const addFunds: ((tx: TransactionSkeletonType) => TransactionSkeletonType)[] = [];
+// Limit order rule on non decreasing value:
+// min bOut such that aM * aIn + bM * bIn <= aM * aOut + bM * bOut
+// bOut = (aM * (aIn - aOut) + bM * bIn) / bM
+// But integer divisions truncate, so we need to round to the upper value
+// bOut = (aM * (aIn - aOut) + bM * bIn + bM - 1) / bM
+// bOut = (aM * (aIn - aOut) + bM * (bIn + 1) - 1) / bM
+function calculate(aM: bigint, bM: bigint, aIn: bigint, bIn: bigint, aOut: bigint) {
+    return (aM * (aIn - aOut) + bM * (bIn + 1n) - 1n) / bM;
+}
 
-        for (const oo of logSplit(orders.myCompletedOrders)) {
-            addFunds.push((tx: TransactionSkeletonType) => melt(tx, ...oo));
-        }
+export function orderMelt(tx: TransactionSkeletonType, ...oo: MyOrder[]) {
+    return addCells(tx, "append", oo.flatMap((o) => [o.cell, o.master]), []);
+}
 
-        const unavailableFunds = [
-            TransactionSkeleton()
-                .update("inputs", i => i.concat(
-                    orders.myCkb2UdtOrders.flatMap(c => [c.cell, c.master]),
-                    orders.myUdt2CkbOrders.flatMap(c => [c.cell, c.master])
-                ))
-        ];
-        return addAssetsFunds(assets, addFunds, unavailableFunds)
-    }
-
-    return { udtType, orderScript, create, match, satisfy, melt, sifter, fundAdapter };
+export function limitOrderScript() {
+    return defaultScript("LIMIT_ORDER");
 }
 
 // Use example:
@@ -307,16 +326,36 @@ export function udt2CkbRatioCompare(
     return Number(o0.udtMultiplier * o1.ckbMultiplier - o1.udtMultiplier * o0.ckbMultiplier);
 }
 
-export function limitOrderScript() {
-    return defaultScript("LIMIT_ORDER");
+export function normalizeCkbMinMatchLog(n: number) {
+    return n > 64 ? 64 : n;
 }
 
-// Limit order rule on non decreasing value:
-// min bOut such that aM * aIn + bM * bIn <= aM * aOut + bM * bOut
-// bOut = (aM * (aIn - aOut) + bM * bIn) / bM
-// But integer divisions truncate, so we need to round to the upper value
-// bOut = (aM * (aIn - aOut) + bM * bIn + bM - 1) / bM
-// bOut = (aM * (aIn - aOut) + bM * (bIn + 1) - 1) / bM
-function calculate(aM: bigint, bM: bigint, aIn: bigint, bIn: bigint, aOut: bigint) {
-    return (aM * (aIn - aOut) + bM * (bIn + 1n) - 1n) / bM;
+export function normalizeRatio(r: OrderRatio): OrderRatio {
+    if (r.ckbMultiplier === 0n || r!.udtMultiplier === 0n) {
+        return normalizedInvalidRatio;
+    } else {
+        return Object.freeze({ ...r });
+    }
 }
+
+export const normalizedInvalidRatio: OrderRatio = Object.freeze({ ckbMultiplier: 0n, udtMultiplier: 0n });
+
+const ckbOrderOccupiedMax = BigInt(I8Cell.from({
+    lock: i8ScriptPadding,
+    type: i8ScriptPadding,
+    data: hexify(OrderData.pack({
+        udtAmount: 0n,
+        type: "MatchOrderData",
+        value: {
+            masterOutpoint: {
+                txHash: "0x0000000000000000000000000000000000000000000000000000000000000000",
+                index: "0x0"
+            },
+            orderInfo: {
+                ckbToUdt: normalizedInvalidRatio,
+                udtToCkb: normalizedInvalidRatio,
+                ckbMinMatchLog: 0,
+            }
+        },
+    })),
+}).cellOutput.capacity);

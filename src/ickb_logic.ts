@@ -148,15 +148,15 @@ export function ickbRequestWithdrawalWith(
     );
 }
 
-export const ickbUdtMark = "ICKB_UDT";
+export const ickbMark = "ICKB";
 
-export function addIckbUdtAsset(
+export function addIckbAsset(
     assets: Assets,
     accountLock: I8Script,
 ): Assets {
     const getDelta = (tx: TransactionSkeletonType) => ickbDelta(tx);
 
-    return addAsset(assets, ickbUdtMark, getDelta, {
+    return addAsset(assets, ickbMark, getDelta, {
         //Handler of UDT change cells
         DEFAULT: (tx: TransactionSkeletonType) => {
             const delta = getDelta(tx);

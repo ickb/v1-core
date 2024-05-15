@@ -67,7 +67,7 @@ pub fn main() -> Result<(), Error> {
             (None, false, Some(_), true) => (),
             // Melt Order
             (Some(_), true, None, false) => (),
-            // Match Order or Fulfill Order
+            // Match Order
             (Some(i), false, Some(o), false) => validate(i, o)?,
             // Every other configuration is invalid
             _ => return Err(Error::InvalidConfiguration),
@@ -78,71 +78,54 @@ pub fn main() -> Result<(), Error> {
 }
 
 fn validate(i: Data, o: Data) -> Result<(), Error> {
-    if i.udt_hash != o.udt_hash {
-        return Err(Error::DifferentType);
+    if i.info != o.info {
+        return Err(Error::DifferentInfo);
     }
 
-    let (m, is_fulfilled) = match (i.metadata, o.metadata) {
-        (Some(m), None) => {
-            let residual = if m.is_udt_to_ckb {
-                o.udt
-            } else {
-                o.ckb_unoccupied
-            };
-            // No residual value to convert
-            if !residual.is_zero() {
-                return Err(Error::NotFulfilled);
-            }
-            (m, true)
-        }
-        (Some(in_m), Some(out_m)) => {
-            // Check that order Metadata between input and output matches
-            if in_m != out_m {
-                return Err(Error::DifferentMetadata);
-            }
-            (in_m, false)
-        }
-        (None, ..) => return Err(Error::AttemptToChangeFulfilled),
+    let (is_ckb_to_udt, Ratio { ckb_mul, udt_mul }, ckb_min_match) = match (
+        i.info.ckb_to_udt,
+        i.ckb > o.ckb,
+        i.info.udt_to_ckb,
+        i.udt > o.udt,
+    ) {
+        (Some(ratio), true, _, false) => (true, ratio, i.info.ckb_min_match),
+        (_, false, Some(ratio), true) => (false, ratio, i.info.ckb_min_match),
+        _ => return Err(Error::InvalidMatch),
     };
 
     // Check that limit order does not lose value
     // Note on Overflow: u128 quantities represented with u256, no overflow is possible
-    if i.ckb * m.ckb_mul + i.udt * m.udt_mul > o.ckb * m.ckb_mul + o.udt * m.udt_mul {
+    if i.ckb * ckb_mul + i.udt * udt_mul > o.ckb * ckb_mul + o.udt * udt_mul {
         return Err(Error::DecreasingValue);
     }
 
-    if is_fulfilled {
-        return Ok(());
-    }
-
-    // Validate limit order partial match
-    if m.is_udt_to_ckb {
-        // UDT -> CKB
-
-        // DOS prevention: disallow partial match lower than the equivalent of min_ckb_match CKB
-        // Note on Overflow: u128 quantities represented with u256, no overflow is possible
-        if i.ckb + m.min_ckb_match > o.ckb {
-            return Err(Error::InsufficientMatch);
+    // Validate limit order match
+    if is_ckb_to_udt {
+        // CKB -> UDT
+        // Check that an already fulfilled order is not modified
+        if i.ckb_unoccupied.is_zero() {
+            return Err(Error::AttemptToChangeFulfilled);
         }
 
-        // Leave at least min_ckb_match equivalent of udt for the complete fulfillment
-        if o.udt * m.udt_mul < m.min_ckb_match * m.ckb_mul {
-            return Err(Error::InsufficientResidual);
+        // DOS prevention: disallow partial match lower than the equivalent of ckb_min_match
+        // Note on Overflow: u128 quantities represented with u256, no overflow is possible
+        if !o.ckb_unoccupied.is_zero() && i.ckb < o.ckb + ckb_min_match {
+            return Err(Error::InsufficientMatch);
         }
     } else {
-        // CKB -> UDT
+        // UDT -> CKB
+        // Check that an already fulfilled order is not modified
+        if i.udt.is_zero() {
+            return Err(Error::AttemptToChangeFulfilled);
+        }
 
-        // Disallow partial match lower than the equivalent of min_ckb_match
+        // DOS prevention: disallow partial match lower than the equivalent of ckb_min_match
         // Note on Overflow: u128 quantities represented with u256, no overflow is possible
-        if i.udt * m.udt_mul + m.min_ckb_match * m.ckb_mul > o.udt * m.udt_mul {
+        if !o.udt.is_zero() && i.udt * udt_mul > o.udt * udt_mul + ckb_min_match * ckb_mul {
             return Err(Error::InsufficientMatch);
         }
-
-        // Leave at least min_ckb_match for the complete fulfillment step
-        if o.ckb_unoccupied + ORDER_INFO < m.min_ckb_match {
-            return Err(Error::InsufficientResidual);
-        }
     }
+
     Ok(())
 }
 
@@ -157,16 +140,21 @@ struct Data {
     ckb: U256,
     udt: U256,
     ckb_unoccupied: U256,
-    udt_hash: [u8; 32],
-    metadata: Option<Metadata>,
+    info: Info,
 }
 
 #[derive(Clone, Copy, PartialEq)]
-struct Metadata {
-    is_udt_to_ckb: bool,
+struct Info {
+    udt_hash: [u8; 32],
+    ckb_to_udt: Option<Ratio>,
+    udt_to_ckb: Option<Ratio>,
+    ckb_min_match: U256,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+struct Ratio {
     ckb_mul: U256,
     udt_mul: U256,
-    min_ckb_match: U256,
 }
 
 fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Error> {
@@ -185,7 +173,6 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
     let action = match u32::from_le_bytes(load(ACTION)?.try_into().unwrap()) {
         0 => Action::Mint,
         1 => Action::Match,
-        2 => Action::Fulfill,
         _ => return Err(Error::InvalidAction),
     };
 
@@ -205,23 +192,36 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
         }
     };
 
-    let metadata = if action == Action::Fulfill {
-        None
-    } else {
-        let is_udt_to_ckb: bool = load(IS_UDT_TO_CKB)?[0] != 0;
-        let ckb_mul = U256::from(u64::from_le_bytes(
-            load(CKB_MULTIPLIER)?.try_into().unwrap(),
-        ));
-        let udt_mul = U256::from(u64::from_le_bytes(
-            load(UDT_MULTIPLIER)?.try_into().unwrap(),
-        ));
-        let min_ckb_match = U256::from(1) << load(LOG_MIN_CKB_MATCH)?[0].min(64);
-        Some(Metadata {
-            is_udt_to_ckb,
-            ckb_mul,
-            udt_mul,
-            min_ckb_match,
-        })
+    let mut load_ratio = || -> Result<Option<Ratio>, Error> {
+        let ckb_mul = U256::from(u64::from_le_bytes(load(CKB_MUL)?.try_into().unwrap()));
+        let udt_mul = U256::from(u64::from_le_bytes(load(UDT_MUL)?.try_into().unwrap()));
+        match (ckb_mul.is_zero(), udt_mul.is_zero()) {
+            (false, false) => Ok(Some(Ratio { ckb_mul, udt_mul })),
+            (true, true) => Ok(None),
+            _ => Err(Error::InvalidRatio),
+        }
+    };
+
+    let ckb_to_udt = load_ratio()?;
+    let udt_to_ckb = load_ratio()?;
+    let ckb_min_match = match load(CKB_MIN_MATCH_LOG)?[0] {
+        n @ 0..=64 => U256::from(1) << n,
+        _ => return Err(Error::InvalidCkbMinMatchLog),
+    };
+
+    // Validate both ratio
+    match (ckb_to_udt, udt_to_ckb) {
+        (Some(c2u), Some(u2c)) => {
+            // Check that if we convert from ckb to udt and then back from udt to ckb, it doesn't lose value.
+            // ((initial_ckb * c2u.ckb_mul / c2u.udt_mul) * u2c.udt_mul / u2c.ckb_mul) >= initial_ckb
+            // ~ initial_ckb * c2u.ckb_mul * u2c.udt_mul >= initial_ckb * c2u.udt_mul * u2c.ckb_mul
+            // ~ c2u.ckb_mul * u2c.udt_mul >= c2u.udt_mul * u2c.ckb_mul
+            if c2u.ckb_mul * u2c.udt_mul < c2u.udt_mul * u2c.ckb_mul {
+                return Err(Error::ConcaveRatio);
+            }
+        }
+        (None, None) => return Err(Error::BothRatioNull),
+        _ => (),
     };
 
     // There must be no remaining data in raw_data
@@ -242,8 +242,12 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
         ckb,
         udt,
         ckb_unoccupied,
-        udt_hash,
-        metadata,
+        info: Info {
+            udt_hash,
+            ckb_to_udt,
+            udt_to_ckb,
+            ckb_min_match,
+        },
     };
 
     Ok((master_metapoint, order_data))
@@ -255,7 +259,6 @@ const ACTION: usize = 4;
 enum Action {
     Mint = 0,
     Match,
-    Fulfill,
 }
 
 // struct OutPoint {
@@ -263,13 +266,16 @@ const TX_HASH: usize = 32;
 const INDEX: usize = 4;
 // }
 
-// struct OrderInfo {
-const IS_UDT_TO_CKB: usize = 1;
-const CKB_MULTIPLIER: usize = 8;
-const UDT_MULTIPLIER: usize = 8;
-const LOG_MIN_CKB_MATCH: usize = 1;
+// struct Ratio {
+const CKB_MUL: usize = 8;
+const UDT_MUL: usize = 8;
 // }
-const ORDER_INFO: usize = IS_UDT_TO_CKB + CKB_MULTIPLIER + CKB_MULTIPLIER + LOG_MIN_CKB_MATCH;
+
+// struct OrderInfo {
+// const CKB_TO_UDT: usize = RATIO;
+// const UDT_TO_CKB: usize = RATIO;
+const CKB_MIN_MATCH_LOG: usize = 1;
+// }
 
 // struct MintOrderData { // UnionId: 0
 const MASTER_DISTANCE: usize = 4;
@@ -279,8 +285,4 @@ const MASTER_DISTANCE: usize = 4;
 // struct MatchOrderData { // UnionId: 1
 // const MASTER_OUTPOINT : usize = OUTPOINT;
 // const ORDER_INFO : usize = ORDER_INFO;
-// }
-
-// struct FulfillOrderData { // UnionId: 2
-// const MASTER_OUTPOINT: usize = OUTPOINT;
 // }

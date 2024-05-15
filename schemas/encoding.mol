@@ -2,25 +2,24 @@
 
 // The `UintN` is used to store a `N` bits unsigned integer
 // as a byte array in little endian.
-array Uint8           [byte; 1];
-array Uint32          [byte; 4];
-array Uint64          [byte; 8];
-array Uint128         [byte; 16];
+array Uint8            [byte; 1];
+array Uint32           [byte; 4];
+array Uint64           [byte; 8];
+array Uint128          [byte; 16];
 
-array Boolean         [byte; 1];
-array Int32           [byte; 4];
-array Byte32          [byte; 32];
+array Int32            [byte; 4];
+array Byte32           [byte; 32];
 
 struct OutPoint {
-    tx_hash:          Byte32,
-    index:            Uint32,
+    tx_hash:           Byte32,
+    index:             Uint32,
 }
 
 /* iCKB Logic data types */
 
 struct ReceiptDataV0 {
-    deposit_quantity: Uint32,
-    deposit_amount:   Uint64,
+    deposit_quantity:  Uint32,
+    deposit_amount:    Uint64,
 }
 
 union ReceiptData {
@@ -30,40 +29,39 @@ union ReceiptData {
 /* Owned Owner data types */
 
 struct OwnedOwnerData {
-    owned_distance:   Int32,
+    owned_distance:    Int32,
 }
 
 /* Order data types */
 
+struct Ratio {
+    ckb_multiplier:    Uint64,
+    udt_multiplier:    Uint64,
+}
+
 struct OrderInfo {
-    is_udt_to_ckb:    Boolean,
-    ckb_multiplier:   Uint64,
-    udt_multiplier:   Uint64,
-    log_min_match:    Uint8,
+    ckb_to_udt:        Ratio,
+    udt_to_ckb:        Ratio,
+    ckb_min_match_log: Uint8,
 }
 
 struct MintOrderData {
-    master_distance:  Int32,
-    orderInfo:        OrderInfo,
+    master_distance:   Int32,
+    order_info:        OrderInfo,
 }
 
 struct MatchOrderData {
-    master_outpoint:  OutPoint,
-    order_info:       OrderInfo,
-}
-
-struct FulfillOrderData {
-    master_outpoint:  OutPoint,
+    master_outpoint:   OutPoint,
+    order_info:        OrderInfo,
 }
 
 union PartialOrderData {
     MintOrderData,
     MatchOrderData,
-    FulfillOrderData,
 }
 
 /* UDT data types */
 
 struct UdtData {
-    udt_amount:       Uint128,
+    udt_amount:        Uint128,
 }

@@ -5,7 +5,7 @@ import { OutPoint as OP } from "@ckb-lumos/base/lib/blockchain.js";
 import type { ObjectLayoutCodec } from "@ckb-lumos/codec/lib/molecule/layout.js";
 import type { BytesLike, Fixed, FixedBytesCodec } from "@ckb-lumos/codec/lib/base.js";
 
-export { Boolean, Uint8, Uint32, Uint64, Uint128, Int32 } from '@ickb/lumos-utils';
+export { Uint8, Uint32, Uint64, Uint128, Int32 } from '@ickb/lumos-utils';
 
 export type PackableOrder = PackParam<typeof UdtData> & PackParam<typeof PartialOrderData>;
 export type UnpackedOrder = UnpackResult<typeof UdtData> & UnpackResult<typeof PartialOrderData>;
