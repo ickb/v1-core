@@ -1,21 +1,22 @@
 import {
-    I8CellDep, I8OutPoint, I8Script, ScriptConfigAdapter, cellDeps, defaultScript,
-    getChainInfo, i8ScriptPadding, initializeConfig, getConfig, hex
+    I8CellDep, I8OutPoint, I8Script, ScriptConfigAdapter, cellDeps, i8ScriptPadding, hex
 } from "@ickb/lumos-utils";
+import type { Chain } from "@ickb/lumos-utils";
 import devnetMigration from '../scripts/deployment/devnet/migrations/latest.json';
-import type { ScriptConfigs } from "@ckb-lumos/config-manager/lib/types.js";
+import testnetMigration from '../scripts/deployment/testnet/migrations/2024-05-21-151311.json';
 
 const errorConfigNotAvailable = "The requested config is not available";
-export function initializeIckbConfig() {
-    if (getChainInfo().chain != "devnet") {
+const errorMissingScriptInConfig = "The requested script is missing in the old config";
+export function getIckbScriptConfigs(chain: Chain, oldScriptConfigs: { [id: string]: ScriptConfigAdapter }) {
+    if (chain === "mainnet") {
         throw Error(errorConfigNotAvailable);
     }
 
-    const { cell_recipes, dep_group_recipes } = devnetMigration;
+    const { cell_recipes, dep_group_recipes } = chain === "testnet" ? testnetMigration : devnetMigration;
     const { tx_hash, index } = dep_group_recipes[0];
     const outPoint = I8OutPoint.from({ txHash: tx_hash, index: hex(index) });
 
-    const newScriptConfig: ScriptConfigs = {};
+    const newScriptConfig: typeof oldScriptConfigs = {};
     for (const c of cell_recipes) {
         newScriptConfig[c.name] = new ScriptConfigAdapter(
             I8Script.from({
@@ -27,19 +28,22 @@ export function initializeIckbConfig() {
         );
     }
 
-    for (const name of ["SECP256K1_BLAKE160", "DAO", "SECP256K1_DATA", "SECP256K1_BLAKE160_MULTISIG"]) {
-        const s = defaultScript(name);
+    const names = ["SECP256K1_BLAKE160", "DAO", "SECP256K1_BLAKE160_MULTISIG"];
+    if (chain !== "devnet") {
+        names.push("XUDT");
+    }
+    for (const name of names) {
+        const s = oldScriptConfigs[name];
+        if (!s) {
+            throw Error(errorMissingScriptInConfig);
+        }
         newScriptConfig[name] = new ScriptConfigAdapter(
             I8Script.from({
-                ...s,
+                ...s.defaultScript,
                 [cellDeps]: [I8CellDep.from({ outPoint, depType: "depGroup" })]
             })
         );
     }
 
-    const oldConfig = getConfig();
-    initializeConfig({
-        PREFIX: oldConfig.PREFIX,
-        SCRIPTS: { ...oldConfig.SCRIPTS, ...newScriptConfig }
-    });
+    return newScriptConfig;
 }

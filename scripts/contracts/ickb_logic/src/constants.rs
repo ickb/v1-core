@@ -19,7 +19,7 @@ pub const XUDT_CODE_HASH: [u8; 32] =
 pub const XUDT_HASH_TYPE: u8 = ScriptHashType::Data1 as u8;
 
 // https://github.com/nervosnetwork/rfcs/blob/41a469a10cce2104656767944e9aba9a61ab497d/rfcs/0052-extensible-udt/0052-extensible-udt.md#owner-mode-update
-pub const XUDT_ARGS_FLAGS: [u8; 4] = [128, 0, 0, 0]; // Flag 0x80000000
+pub const XUDT_ARGS_FLAGS: [u8; 4] = [0, 0, 0, 128]; // Flag 0x80000000
 
 // iCKB deposit constants
 pub const CKB_MINIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT: u64 = 1_000 * 100_000_000; // 1000 CKB

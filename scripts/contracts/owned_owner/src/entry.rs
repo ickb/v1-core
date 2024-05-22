@@ -69,7 +69,7 @@ struct Accounting {
 fn extract_owned_metapoint(index: usize, source: Source) -> Result<MetaPoint, Error> {
     let metapoint = extract_metapoint(index, source)?;
     let owned_distance = load_cell_data(index, source)?;
-    if owned_distance.len() < 4 {
+    if owned_distance.len() != 4 {
         return Err(Error::Encoding);
     }
 

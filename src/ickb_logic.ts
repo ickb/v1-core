@@ -5,10 +5,10 @@ import { hexify } from "@ckb-lumos/codec/lib/bytes.js";
 import { extractDaoDataCompatible } from "@ckb-lumos/common-scripts/lib/dao.js";
 import { TransactionSkeleton, type TransactionSkeletonType, minimalCellCapacity } from "@ckb-lumos/helpers";
 import {
-    addAsset, type Assets, I8Cell, I8Header, I8Script, addCells, daoDeposit, daoRequestWithdrawalFrom,
+    addAsset, type Assets, I8Cell, I8Header, I8Script, addCells, CKB, daoDeposit, daoRequestWithdrawalFrom,
     daoRequestWithdrawalWith, daoSifter, daoWithdrawFrom, defaultScript, epochSinceCompare,
     errorUndefinedBlockNumber, headerDeps, isDaoDeposit, scriptEq, since, typeSifter, isDaoWithdrawalRequest,
-    lockExpanderFrom, hex, ckbInShannons, Uint128, addAssetsFunds
+    lockExpanderFrom, hex, Uint128, addAssetsFunds
 } from "@ickb/lumos-utils";
 import { OwnedOwnerData, ReceiptData, UdtData } from "./encoding.js";
 
@@ -16,7 +16,6 @@ export type WithdrawalRequestGroup = Readonly<{
     ownedWithdrawalRequest: I8Cell,
     owner: I8Cell,
 }>;
-
 
 export function ickbSifter(
     inputs: readonly Cell[],
@@ -274,7 +273,7 @@ export function ickbDelta(tx: TransactionSkeletonType) {
     for (const c of tx.inputs) {
         //iCKB token
         if (scriptEq(c.cellOutput.type, ickbUdt)) {
-            ickbDelta += Uint128.unpack(c.data);
+            ickbDelta += Uint128.unpack(c.data.slice(0, 2 + 16 * 2));
             continue;
         }
 
@@ -297,7 +296,7 @@ export function ickbDelta(tx: TransactionSkeletonType) {
     for (const c of tx.outputs) {
         //iCKB token
         if (scriptEq(c.cellOutput.type, ickbUdt)) {
-            ickbDelta -= Uint128.unpack(c.data);
+            ickbDelta -= Uint128.unpack(c.data.slice(0, 2 + 16 * 2));
         }
     }
 
@@ -305,7 +304,7 @@ export function ickbDelta(tx: TransactionSkeletonType) {
 }
 
 export function ickbUdtType() {
-    return I8Script.from({ ...defaultScript("XUDT"), args: computeScriptHash(ickbLogicScript()) + "80000000" });
+    return I8Script.from({ ...defaultScript("XUDT"), args: computeScriptHash(ickbLogicScript()) + "00000080" });
 }
 
 export function ickbLogicScript() {
@@ -316,7 +315,7 @@ export function ownedOwnerScript() {
     return defaultScript("OWNED_OWNER");
 }
 
-export const ICKB_SOFT_CAP_PER_DEPOSIT = 100000n * ckbInShannons;
+export const ICKB_SOFT_CAP_PER_DEPOSIT = 100000n * CKB;
 export function ickbDepositValue(ckbUnoccupiedCapacity: bigint, header: I8Header) {
     let ickbAmount = ckb2Ickb(ckbUnoccupiedCapacity, header, false);
     if (ICKB_SOFT_CAP_PER_DEPOSIT < ickbAmount) {
@@ -346,7 +345,7 @@ export function ickb2Ckb(udtAmount: bigint, header: I8Header, accountDepositCapa
 }
 
 const AR_0 = 10000000000000000n;
-const depositCapacityMultiplier = 82n * ckbInShannons * AR_0 / ICKB_SOFT_CAP_PER_DEPOSIT;
+const depositCapacityMultiplier = 82n * CKB * AR_0 / ICKB_SOFT_CAP_PER_DEPOSIT;
 export function ickbExchangeRatio(header: I8Header, accountDepositCapacity = true) {
     const daoData = extractDaoDataCompatible(header.dao);
     const AR_m = daoData["ar"].toBigInt();

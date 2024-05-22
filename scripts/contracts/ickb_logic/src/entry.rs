@@ -124,7 +124,7 @@ fn check_output(ickb_logic_hash: [u8; 32]) -> Result<u128, Error> {
                 let accounting = amount_2_accounting.entry(deposit_amount).or_insert(default);
                 // Note on Overflow: even locking all CKB supply in receipts using Uint32 maximum
                 // as deposit quantity cannot overflow this counter
-                accounting.deposited += u128::from(deposit_quantity);
+                accounting.receipted += u128::from(deposit_quantity);
             }
             CellType::Udt => {
                 // Note on Overflow: u64 quantities represented with u128, no overflow is possible

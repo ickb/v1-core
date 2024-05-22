@@ -1,0 +1,37 @@
+{
+  "cell_recipes": [
+    {
+      "name": "ICKB_LOGIC",
+      "tx_hash": "0x9a5e3742a9a848494d01785f4e929c02c73dbd072e6404166fdec86176f28742",
+      "index": 0,
+      "occupied_capacity": 5478200000000,
+      "data_hash": "0xb0548ea01aeca772c03e21308462cbc87c46a3ba534e38144ffacd0de6cdebc8",
+      "type_id": "0x71c57bc2a37a8a5865f2e2920f3212e8dd1d5df63fce715c3e850c32b6060dcd"
+    },
+    {
+      "name": "LIMIT_ORDER",
+      "tx_hash": "0x70eae52c0b079c0b63042ce0077eca66f8feede75df66e1a1fcdb57f67b5daef",
+      "index": 0,
+      "occupied_capacity": 3650200000000,
+      "data_hash": "0x6e6042e505c557213783e9bf883b82e96c414ceb50296f809e08771f5b5ff5f5",
+      "type_id": "0x9eb7a9348ff7ea510a5296b761f4302e57681f1347bcbe47203a9f83cb355f91"
+    },
+    {
+      "name": "OWNED_OWNER",
+      "tx_hash": "0x9a5e3742a9a848494d01785f4e929c02c73dbd072e6404166fdec86176f28742",
+      "index": 2,
+      "occupied_capacity": 2797400000000,
+      "data_hash": "0x7ae077310200084d05fff31dc34ac25b545e3a3bd70d485aa02490a9b0a82410",
+      "type_id": "0xe62f827ba2d36c901fad07762f28b298c1193b1989e4d47b7901e709fc4f8c13"
+    }
+  ],
+  "dep_group_recipes": [
+    {
+      "name": "ickb_dep_group",
+      "tx_hash": "0x3a2efebb9bbf9f1526727121da080daa28450f8acd8bd759ffde71057a5e00f9",
+      "index": 0,
+      "data_hash": "0x10d8d12c1fadc605c90be333f499bfc9f4a52bfd5cf2359be3db238254557139",
+      "occupied_capacity": 35300000000
+    }
+  ]
+}

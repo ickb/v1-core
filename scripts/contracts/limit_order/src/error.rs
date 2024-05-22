@@ -11,6 +11,7 @@ pub enum Error {
     NotEmptyArgs,
     DuplicatedMaster,
     InvalidAction,
+    NonZeroPadding,
     InvalidRatio,
     InvalidCkbMinMatchLog,
     ConcaveRatio,
