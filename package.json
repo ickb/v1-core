@@ -1,12 +1,14 @@
 {
   "name": "@ickb/v1-core",
-  "version": "1.3.1",
-  "description": "",
-  "main": "dist/src/index.js",
-  "types": "dist/src/index.d.ts",
+  "version": "1.4.0",
+  "description": "iCKB scripts and utilities for interacting with them",
+  "main": "dist/cjs/src/index.js",
+  "module": "dist/esm/src/index.js",
+  "types": "dist/esm/src/index.d.ts",
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/src/index.js"
+    "build": "pnpm run build:esm && pnpm run build:cjs && node dist/cjs/src/index.js",
+    "build:esm": "tsc",
+    "build:cjs": "tsc --module commonjs --outDir dist/cjs"
   },
   "files": [
     "/dist",
@@ -16,19 +18,21 @@
   "author": "phroi",
   "license": "MIT",
   "dependencies": {
-    "@ckb-lumos/base": "^0.23.0-next.0",
-    "@ckb-lumos/ckb-indexer": "^0.23.0-next.0",
-    "@ckb-lumos/codec": "^0.23.0-next.0",
-    "@ckb-lumos/common-scripts": "^0.23.0-next.0",
-    "@ckb-lumos/config-manager": "^0.23.0-next.0",
-    "@ckb-lumos/hd": "^0.23.0-next.0",
-    "@ckb-lumos/helpers": "^0.23.0-next.0",
-    "@ckb-lumos/rpc": "^0.23.0-next.0",
-    "@ickb/lumos-utils": "1.3.1"
+    "@ckb-lumos/base": "^0.23.0",
+    "@ckb-lumos/ckb-indexer": "^0.23.0",
+    "@ckb-lumos/codec": "^0.23.0",
+    "@ckb-lumos/common-scripts": "^0.23.0",
+    "@ckb-lumos/config-manager": "^0.23.0",
+    "@ckb-lumos/helpers": "^0.23.0",
+    "@ckb-lumos/rpc": "^0.23.0",
+    "@ickb/lumos-utils": "1.4.0"
   },
   "devDependencies": {
-    "@ckb-lumos/molecule": "^0.23.0-next.0",
-    "typescript": "^5.4.5"
+    "typescript": "next",
+    "eslint": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "canary",
+    "@typescript-eslint/parser": "canary",
+    "prettier": "^3.3.3"
   },
-  "packageManager": "pnpm@9.1.2+sha256.19c17528f9ca20bd442e4ca42f00f1b9808a9cb419383cd04ba32ef19322aba7"
+  "packageManager": "pnpm@9.6.0+sha256.dae0f7e822c56b20979bb5965e3b73b8bdabb6b8b8ef121da6d857508599ca35"
 }

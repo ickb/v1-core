@@ -1,44 +1,13 @@
 # iCKB v1 core
 
-## Deploy contracts on testnet
+This repository contains:
 
-1. Download this repo in a folder of your choice:  
+- The iCKB Nervos L1 scripts
+- A small library that provides utilities for interacting with them.
 
-```bash
-git clone https://github.com/ickb/v1-core.git
-```
+## Warning
 
-2. Enter into the repo's folder:
-
-```bash
-cd v1-core/
-```
-
-3. Install dependencies:
-
-```bash
-npm i
-```
-
-4. Define a `env/testnet/.env` file, for example:
-
-```
-CHAIN=testnet
-BUILD_TYPE=release
-DEPLOY_PRIVATE_KEY=0x-YOUR-SECP256K1-BLAKE160-PRIVATE-KEY
-```
-
-Optionally the property `RPC_URL` can also be specified:
-
-```
-RPC_URL=http://127.0.0.1:8114/
-```
-
-5. Deploy the contracts:
-
-```bash
-npm run deploy --chain=testnet
-```
+While the iCKB Nervos L1 scripts are stable and they are expected to live for a long time, not the same goes for the typescript utility library. It's advised against building on top of the typescript library outside iCKB and related Phroi's projects. The absence of docs, the unstable API and the future possibility of it becoming unmaintained make it suitable only as internal library.
 
 ## Licensing
 

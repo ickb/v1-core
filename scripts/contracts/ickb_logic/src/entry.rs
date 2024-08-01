@@ -29,7 +29,7 @@ pub fn main() -> Result<(), Error> {
 
     // Deposit receipts are not transferrable, only convertible
     // Note on Overflow: u64 quantities represented with u128, no overflow is possible
-    if in_udt_ickb + in_receipts_ickb < out_udt_ickb + in_deposits_ickb {
+    if in_udt_ickb + in_receipts_ickb != out_udt_ickb + in_deposits_ickb {
         return Err(Error::AmountMismatch);
     }
 

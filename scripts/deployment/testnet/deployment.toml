@@ -16,6 +16,7 @@ location = { file = "../../build/release/owned_owner" }
 
 # xUDT deployment, see:
 # https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0052-extensible-udt/0052-extensible-udt.md
+# https://github.com/nervosnetwork/rfcs/pull/428/files
 [[cells]]
 name = "XUDT"
 enable_type_id = false

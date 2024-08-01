@@ -709,7 +709,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "ickb_logic"
-version = "1.2.0"
+version = "1.4.0"
 dependencies = [
  "ckb-std",
  "utils",
@@ -756,7 +756,7 @@ checksum = "9c198f91728a82281a64e1f4f9eeb25d82cb32a5de251c6bd1b5154d63a8e7bd"
 
 [[package]]
 name = "limit_order"
-version = "1.2.0"
+version = "1.4.0"
 dependencies = [
  "ckb-std",
  "primitive-types",
@@ -886,7 +886,7 @@ checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
 name = "owned_owner"
-version = "0.1.0"
+version = "1.4.0"
 dependencies = [
  "ckb-std",
  "utils",
@@ -1319,7 +1319,7 @@ checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
 
 [[package]]
 name = "utils"
-version = "1.2.0"
+version = "1.4.0"
 dependencies = [
  "blake2b-ref",
  "ckb-std",
