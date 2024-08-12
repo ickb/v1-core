@@ -1,4 +1,4 @@
-use core::result::Result;
+use core::{convert::TryInto, result::Result};
 
 use ckb_std::{
     ckb_constants::Source,
@@ -10,8 +10,6 @@ use ckb_std::{
     high_level::{load_cell_lock_hash, load_cell_type_hash},
     syscalls::SysError,
 };
-
-use utils::hash_script;
 
 use crate::{
     constants::{
@@ -124,27 +122,31 @@ impl CellTypeIter {
 
 pub fn cell_type_iter(source: Source, ickb_logic_hash: [u8; 32]) -> CellTypeIter {
     let ickb_xudt_args = [ickb_logic_hash.as_slice(), XUDT_ARGS_FLAGS.as_slice()].concat();
-    let ickb_xudt_hash = hash_script(
-        &ScriptBuilder::default()
-            .code_hash(Byte32::from_slice(&XUDT_CODE_HASH).unwrap())
-            .hash_type(XUDT_HASH_TYPE.into())
-            .args(Bytes::from(ickb_xudt_args).pack())
-            .build(),
-    );
+    let ickb_xudt_hash: [u8; 32] = ScriptBuilder::default()
+        .code_hash(Byte32::from_slice(&XUDT_CODE_HASH).unwrap())
+        .hash_type(XUDT_HASH_TYPE.into())
+        .args(Bytes::from(ickb_xudt_args).pack())
+        .build()
+        .calc_script_hash()
+        .as_slice()
+        .try_into()
+        .unwrap();
 
-    let dao_script_hash = hash_script(
-        &ScriptBuilder::default()
-            .code_hash(Byte32::from_slice(&DAO_CODE_HASH).unwrap())
-            .hash_type(DAO_HASH_TYPE.into())
-            .args(Bytes::from(DAO_ARGS.as_slice()).pack())
-            .build(),
-    );
+    let dao_hash: [u8; 32] = ScriptBuilder::default()
+        .code_hash(Byte32::from_slice(&DAO_CODE_HASH).unwrap())
+        .hash_type(DAO_HASH_TYPE.into())
+        .args(Bytes::from(DAO_ARGS.as_slice()).pack())
+        .build()
+        .calc_script_hash()
+        .as_slice()
+        .try_into()
+        .unwrap();
 
     CellTypeIter {
         index: 0,
         source,
         ickb_logic_hash,
         ickb_xudt_hash,
-        dao_hash: dao_script_hash,
+        dao_hash,
     }
 }

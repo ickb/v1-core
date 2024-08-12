@@ -5,10 +5,7 @@ use core::result::Result;
 
 use alloc::vec::Vec;
 use ckb_std::{
-    ckb_types::{
-        packed::{Header, Script},
-        prelude::Entity,
-    },
+    ckb_types::packed::Header,
     error::SysError,
     syscalls::{load_header, load_input_by_field},
     {
@@ -16,18 +13,6 @@ use ckb_std::{
         high_level::*,
     },
 };
-
-use blake2b_ref::Blake2bBuilder;
-
-pub fn hash_script(script: &Script) -> [u8; 32] {
-    let mut output = [0u8; 32];
-    let mut blake2b = Blake2bBuilder::new(32)
-        .personal(b"ckb-default-hash")
-        .build();
-    blake2b.update(script.as_slice());
-    blake2b.finalize(&mut output);
-    output
-}
 
 pub fn has_empty_args() -> Result<bool, SysError> {
     let s = load_script()?;
