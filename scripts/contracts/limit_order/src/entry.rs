@@ -3,8 +3,15 @@ use alloc::collections::BTreeMap;
 use core::result::Result;
 use primitive_types::U256;
 
-use ckb_std::{ckb_constants::Source, high_level::*};
-use utils::{extract_metapoint, extract_udt_cell_data, has_empty_args, MetaPoint};
+use ckb_std::{
+    ckb_constants::Source,
+    high_level::{
+        load_cell_capacity, load_cell_lock_hash, load_cell_occupied_capacity, load_cell_type_hash,
+        load_script_hash, QueryIter,
+    },
+    syscalls::load_cell_data,
+};
+use utils::{extract_metapoint, has_empty_args, MetaPoint, UDT_SIZE};
 
 pub fn main() -> Result<(), Error> {
     if !has_empty_args()? {
@@ -158,27 +165,31 @@ struct Ratio {
 }
 
 fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Error> {
-    let (udt_amount, order_raw_data) = extract_udt_cell_data(index, source)?;
+    let mut data = [0u8; UDT_SIZE + ORDER_SIZE];
 
-    let mut raw_data = &order_raw_data[..];
+    if load_cell_data(&mut data, 0, index, source)? != data.len() {
+        return Err(Error::Encoding);
+    }
+
+    // Data splitter
+    let mut raw_data = data.as_slice();
     let mut load = |size: usize| {
-        if raw_data.len() < size {
-            return Err(Error::Encoding);
-        }
         let field_data: &[u8];
         (field_data, raw_data) = raw_data.split_at(size);
-        return Ok(field_data);
+        return field_data;
     };
 
-    let action = match u32::from_le_bytes(load(ACTION)?.try_into().unwrap()) {
+    let udt_amount = u128::from_le_bytes(load(UDT_SIZE).try_into().unwrap());
+
+    let action = match u32::from_le_bytes(load(ACTION_SIZE).try_into().unwrap()) {
         0 => Action::Mint,
         1 => Action::Match,
         _ => return Err(Error::InvalidAction),
     };
 
     let master_metapoint = {
-        let raw_tx_hash = load(TX_HASH)?;
-        let raw_index = load(INDEX)?;
+        let raw_tx_hash = load(TX_HASH_SIZE);
+        let raw_index = load(INDEX_SIZE);
         if action == Action::Mint {
             if raw_tx_hash != [0u8; 32] {
                 return Err(Error::NonZeroPadding);
@@ -200,8 +211,8 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
     };
 
     let mut load_ratio = || -> Result<Option<Ratio>, Error> {
-        let ckb_mul = U256::from(u64::from_le_bytes(load(CKB_MUL)?.try_into().unwrap()));
-        let udt_mul = U256::from(u64::from_le_bytes(load(UDT_MUL)?.try_into().unwrap()));
+        let ckb_mul = U256::from(u64::from_le_bytes(load(CKB_MUL_SIZE).try_into().unwrap()));
+        let udt_mul = U256::from(u64::from_le_bytes(load(UDT_MUL_SIZE).try_into().unwrap()));
         match (ckb_mul.is_zero(), udt_mul.is_zero()) {
             (false, false) => Ok(Some(Ratio { ckb_mul, udt_mul })),
             (true, true) => Ok(None),
@@ -211,7 +222,7 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
 
     let ckb_to_udt = load_ratio()?;
     let udt_to_ckb = load_ratio()?;
-    let ckb_min_match = match load(CKB_MIN_MATCH_LOG)?[0] {
+    let ckb_min_match = match load(CKB_MIN_MATCH_LOG_SIZE)[0] {
         n @ 0..=64 => U256::from(1) << n,
         _ => return Err(Error::InvalidCkbMinMatchLog),
     };
@@ -230,11 +241,6 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
         (None, None) => return Err(Error::BothRatioNull),
         _ => (),
     };
-
-    // There must be no remaining data in raw_data
-    if raw_data.len() > 0 {
-        return Err(Error::DataTooLong);
-    }
 
     let ckb = U256::from(load_cell_capacity(index, source)?);
     let ckb_unoccupied = ckb - U256::from(load_cell_occupied_capacity(index, source)?);
@@ -266,17 +272,23 @@ enum Action {
     Match,
 }
 
+const ORDER_SIZE: usize = ACTION_SIZE
+    + TX_HASH_SIZE
+    + INDEX_SIZE
+    + 2 * (CKB_MUL_SIZE + UDT_MUL_SIZE)
+    + CKB_MIN_MATCH_LOG_SIZE;
+
 // ORDER_DATA = {
-const ACTION: usize = 4;
+const ACTION_SIZE: usize = 4;
 //   OUT_POINT = { // Or padding and master_distance if ACTION is Mint
-const TX_HASH: usize = 32;
-const INDEX: usize = 4;
+const TX_HASH_SIZE: usize = 32;
+const INDEX_SIZE: usize = 4;
 //   }
 //   ORDER_INFO = {
 //     CKB_TO_UDT, UDT_TO_CKB = {
-const CKB_MUL: usize = 8;
-const UDT_MUL: usize = 8;
+const CKB_MUL_SIZE: usize = 8;
+const UDT_MUL_SIZE: usize = 8;
 //     }
-const CKB_MIN_MATCH_LOG: usize = 1;
+const CKB_MIN_MATCH_LOG_SIZE: usize = 1;
 //   }
 // }

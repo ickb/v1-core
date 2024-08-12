@@ -100,7 +100,7 @@ enum ScriptType {
 impl CellTypeIter {
     fn script_type(&self, h: [u8; 32]) -> ScriptType {
         if h == self.dao_hash {
-            // This condition checks that's a deposit, not a withdrawal
+            // This condition checks that's a deposit, not a withdrawal request or an unknown cell
             if is_deposit_cell(self.index, self.source) {
                 return ScriptType::DaoDeposit;
             } else {

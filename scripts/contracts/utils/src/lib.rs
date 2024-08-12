@@ -3,15 +3,13 @@ extern crate alloc;
 
 use core::result::Result;
 
-use alloc::vec::Vec;
 use ckb_std::{
-    ckb_types::packed::Header,
+    ckb_constants::{InputField, Source},
     error::SysError,
-    syscalls::{load_header, load_input_by_field},
-    {
-        ckb_constants::{InputField, Source},
-        high_level::*,
+    high_level::{
+        load_cell_capacity, load_cell_lock, load_cell_occupied_capacity, load_script, QueryIter,
     },
+    syscalls::{load_cell_data, load_header, load_input_by_field},
 };
 
 pub fn has_empty_args() -> Result<bool, SysError> {
@@ -38,37 +36,35 @@ pub fn has_empty_args() -> Result<bool, SysError> {
     Ok(true)
 }
 
-const AMOUNT: usize = 16;
+pub const UDT_SIZE: usize = 16;
 
-pub fn extract_udt_cell_data(index: usize, source: Source) -> Result<(u128, Vec<u8>), SysError> {
-    let data = load_cell_data(index, source)?;
-
-    if data.len() < AMOUNT {
-        return Err(SysError::Encoding);
+pub fn extract_udt_amount(index: usize, source: Source) -> Result<u128, SysError> {
+    let mut data = [0u8; UDT_SIZE];
+    match load_cell_data(&mut data, 0, index, source) {
+        Ok(UDT_SIZE) | Err(SysError::LengthNotEnough(_)) => Ok(u128::from_le_bytes(data)),
+        Ok(_) => return Err(SysError::Encoding),
+        Err(err) => return Err(err),
     }
-
-    let udt_amount = u128::from_le_bytes(data[..AMOUNT].try_into().unwrap());
-    let extra_data = data[AMOUNT..].to_vec();
-    Ok((udt_amount, extra_data))
 }
 
 pub fn extract_unused_capacity(index: usize, source: Source) -> Result<u64, SysError> {
     Ok(load_cell_capacity(index, source)? - load_cell_occupied_capacity(index, source)?)
 }
 
-const DAO_START: usize = 160;
-const C: usize = 8;
-const AR: usize = 8;
+const AR_OFFSET: usize = 160 + 8;
+const AR_SIZE: usize = 8;
 
 pub fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, SysError> {
-    let mut h = [0u8; Header::TOTAL_SIZE];
-    load_header(&mut h, 0, index, source)?;
-    let ar = u64::from_le_bytes(h[DAO_START + C..DAO_START + C + AR].try_into().unwrap());
-    Ok(ar)
+    let mut data = [0u8; AR_SIZE];
+    match load_header(&mut data, AR_OFFSET, index, source) {
+        Ok(AR_SIZE) | Err(SysError::LengthNotEnough(_)) => Ok(u64::from_le_bytes(data)),
+        Ok(_) => return Err(SysError::Encoding),
+        Err(err) => return Err(err),
+    }
 }
 
-const TX_HASH: usize = 32;
-const INDEX: usize = 4;
+const TX_HASH_SIZE: usize = 32;
+const INDEX_SIZE: usize = 4;
 
 pub fn extract_metapoint(index: usize, source: Source) -> Result<MetaPoint, SysError> {
     if source == Source::Output {
@@ -78,11 +74,15 @@ pub fn extract_metapoint(index: usize, source: Source) -> Result<MetaPoint, SysE
         });
     }
 
-    let mut d = [0u8; TX_HASH + INDEX];
+    let mut d = [0u8; TX_HASH_SIZE + INDEX_SIZE];
     load_input_by_field(&mut d, 0, index, source, InputField::OutPoint)?;
     Ok(MetaPoint {
-        tx_hash: Some(d[..TX_HASH].try_into().unwrap()),
-        index: u32::from_le_bytes(d[TX_HASH..TX_HASH + INDEX].try_into().unwrap()) as i64,
+        tx_hash: Some(d[..TX_HASH_SIZE].try_into().unwrap()),
+        index: u32::from_le_bytes(
+            d[TX_HASH_SIZE..TX_HASH_SIZE + INDEX_SIZE]
+                .try_into()
+                .unwrap(),
+        ) as i64,
     })
 }
 

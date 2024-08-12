@@ -16,7 +16,6 @@ pub enum Error {
     InvalidCkbMinMatchLog,
     ConcaveRatio,
     BothRatioNull,
-    DataTooLong,
     MissingUdtType,
     SameMaster,
     ScriptMisuse,

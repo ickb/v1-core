@@ -1,11 +1,10 @@
-use core::{convert::TryInto, result::Result};
+use core::result::Result;
 
 use alloc::collections::BTreeMap;
 use ckb_std::{
     ckb_constants::Source,
-    high_level::{
-        load_cell_data, load_cell_lock_hash, load_cell_type_hash, load_script_hash, QueryIter,
-    },
+    high_level::{load_cell_lock_hash, load_cell_type_hash, load_script_hash, QueryIter},
+    syscalls::{load_cell_data, SysError},
 };
 use utils::{extract_metapoint, has_empty_args, MetaPoint};
 
@@ -66,14 +65,18 @@ struct Accounting {
     owner: u64,
 }
 
+const OWNED_DISTANCE_SIZE: usize = 4;
+
 fn extract_owned_metapoint(index: usize, source: Source) -> Result<MetaPoint, Error> {
     let metapoint = extract_metapoint(index, source)?;
-    let owned_distance = load_cell_data(index, source)?;
-    if owned_distance.len() != 4 {
-        return Err(Error::Encoding);
-    }
 
-    let d = i32::from_le_bytes(owned_distance[..4].try_into().unwrap());
+    let mut data = [0u8; OWNED_DISTANCE_SIZE];
+    let d = match load_cell_data(&mut data, 0, index, source) {
+        Ok(OWNED_DISTANCE_SIZE) | Err(SysError::LengthNotEnough(_)) => i32::from_le_bytes(data),
+        Ok(_) => return Err(Error::Encoding),
+        Err(err) => return Err(Error::from(err)),
+    };
+
     return Ok(MetaPoint {
         tx_hash: metapoint.tx_hash,
         index: metapoint.index + d as i64,

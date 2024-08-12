@@ -9,6 +9,7 @@ pub const DAO_ARGS: [u8; 0] = [];
 
 // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#deposit
 pub const DAO_DEPOSIT_DATA: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+pub const DAO_DEPOSIT_DATA_SIZE: usize = DAO_DEPOSIT_DATA.len();
 
 // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0023-dao-deposit-withdraw/0023-dao-deposit-withdraw.md#calculation
 pub const GENESIS_ACCUMULATED_RATE: u128 = 10_000_000_000_000_000; // 10^16 Genesis block accumulated rate

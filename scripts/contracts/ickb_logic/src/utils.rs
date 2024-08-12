@@ -1,24 +1,33 @@
 use core::{convert::TryInto, result::Result};
 
-use ckb_std::{ckb_constants::Source, high_level::load_cell_data};
+use ckb_std::{
+    ckb_constants::Source,
+    syscalls::{load_cell_data, SysError},
+};
 
-use crate::{constants::DAO_DEPOSIT_DATA, error::Error};
+use crate::{
+    constants::{DAO_DEPOSIT_DATA, DAO_DEPOSIT_DATA_SIZE},
+    error::Error,
+};
 
 // Data layout in bytes
 // {
-const UNION_ID: usize = 4;
-const DEPOSIT_QUANTITY: usize = 4;
-const DEPOSIT_AMOUNT: usize = 8;
+const UNION_ID_SIZE: usize = 4;
+const DEPOSIT_QUANTITY_SIZE: usize = 4;
+const DEPOSIT_AMOUNT_SIZE: usize = 8;
 // }
 
+const RECEIPT_SIZE: usize = UNION_ID_SIZE + DEPOSIT_QUANTITY_SIZE + DEPOSIT_AMOUNT_SIZE;
+
 pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u32, u64), Error> {
-    let data = load_cell_data(index, source)?;
-    if data.len() != UNION_ID + DEPOSIT_QUANTITY + DEPOSIT_AMOUNT {
-        return Err(Error::Encoding);
-    }
+    let mut data = [0u8; RECEIPT_SIZE];
+    let mut raw_data = match load_cell_data(&mut data, 0, index, source) {
+        Ok(RECEIPT_SIZE) | Err(SysError::LengthNotEnough(_)) => data.as_slice(),
+        Ok(_) => return Err(Error::Encoding),
+        Err(err) => return Err(Error::from(err)),
+    };
 
     // Data splitter
-    let mut raw_data = data.as_slice();
     let mut load = |size: usize| {
         let field_data: &[u8];
         (field_data, raw_data) = raw_data.split_at(size);
@@ -26,21 +35,23 @@ pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u32, u64), 
     };
 
     //Check that union id is indeed zero
-    if u32::from_le_bytes(load(UNION_ID).try_into().unwrap()) != 0 {
+    if u32::from_le_bytes(load(UNION_ID_SIZE).try_into().unwrap()) != 0 {
         return Err(Error::InvalidUnionId);
     }
 
     // The quantity of the deposits
-    let deposit_quantity = u32::from_le_bytes(load(DEPOSIT_QUANTITY).try_into().unwrap());
+    let deposit_quantity = u32::from_le_bytes(load(DEPOSIT_QUANTITY_SIZE).try_into().unwrap());
 
     // Stored in little endian is the amount of a single deposit
-    let deposit_amount = u64::from_le_bytes(load(DEPOSIT_AMOUNT).try_into().unwrap());
+    let deposit_amount = u64::from_le_bytes(load(DEPOSIT_AMOUNT_SIZE).try_into().unwrap());
 
     Ok((deposit_quantity, deposit_amount))
 }
 
 pub fn is_deposit_cell(index: usize, source: Source) -> bool {
-    load_cell_data(index, source)
-        .map(|data| data.as_ref() == DAO_DEPOSIT_DATA)
-        .unwrap_or(false)
+    let mut data = DAO_DEPOSIT_DATA.clone();
+    match load_cell_data(&mut data, 0, index, source) {
+        Ok(DAO_DEPOSIT_DATA_SIZE) => data == DAO_DEPOSIT_DATA,
+        _ => false,
+    }
 }
