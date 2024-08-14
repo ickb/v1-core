@@ -34,14 +34,12 @@ pub fn main() -> Result<(), Error> {
                     // Owner Cell
                     let metapoint = extract_owned_metapoint(index, source)?;
                     let accounting = metapoint_2_accounting.entry(metapoint).or_insert(default);
-                    // Note on Overflow: even locking all CKB supply in owner cells cannot overflow this counter
                     accounting.owner += 1;
                 }
                 (true, false) => {
                     // Owned Cell
                     let metapoint = extract_metapoint(index, source)?;
                     let accounting = metapoint_2_accounting.entry(metapoint).or_insert(default);
-                    // Note on Overflow: even locking all CKB supply in owned cells cannot overflow this counter
                     accounting.owned += 1;
                 }
                 (true, true) => return Err(Error::ScriptMisuse),

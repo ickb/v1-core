@@ -28,7 +28,6 @@ pub fn main() -> Result<(), Error> {
     let (in_udt_ickb, in_receipts_ickb, in_deposits_ickb) = check_input(ickb_logic_hash)?;
 
     // Deposit receipts are not transferrable, only convertible
-    // Note on Overflow: u64 quantities represented with u128, no overflow is possible
     if in_udt_ickb + in_receipts_ickb != out_udt_ickb + in_deposits_ickb {
         return Err(Error::AmountMismatch);
     }
@@ -49,19 +48,16 @@ fn check_input(ickb_logic_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
                 let deposit_amount = extract_unused_capacity(index, source)?;
 
                 // Convert to iCKB and apply a 10% discount for the amount exceeding the soft iCKB cap per deposit
-                // Note on Overflow: u64 quantities represented with u128, no overflow is possible
                 total_deposits_ickb += deposit_to_ickb(index, source, deposit_amount)?;
             }
             CellType::Receipt => {
                 let (deposit_quantity, deposit_amount) = extract_receipt_data(index, source)?;
 
                 // Convert to iCKB and apply a 10% fee for the amount exceeding the soft iCKB cap per deposit
-                // Note on Overflow: u64 quantities represented with u128, no overflow is possible
                 total_receipts_ickb +=
                     u128::from(deposit_quantity) * deposit_to_ickb(index, source, deposit_amount)?;
             }
             CellType::Udt => {
-                // Note on Overflow: u64 quantities represented with u128, no overflow is possible
                 total_udt_ickb += extract_udt_amount(index, source)?;
             }
             CellType::Unknown => {}
@@ -76,8 +72,6 @@ fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Er
     let ar_0 = GENESIS_ACCUMULATED_RATE;
     let ar_m = u128::from(extract_accumulated_rate(index, source)?);
 
-    // Note on Overflow: u64 quantities represented with u128, no overflow is possible
-    // Even more ar_0 <= ar_m, iCKB amounts will always be smaller than the CKB amounts they wrap
     let ickb_amount = amount * ar_0 / ar_m;
 
     // Apply a 10% discount for the amount exceeding the soft iCKB cap per deposit
@@ -111,7 +105,6 @@ fn check_output(ickb_logic_hash: [u8; 32]) -> Result<u128, Error> {
                 }
 
                 let accounting = amount_2_accounting.entry(amount).or_insert(default);
-                // Note on Overflow: even locking all CKB supply in deposits cannot overflow this counter
                 accounting.deposited += 1;
             }
             CellType::Receipt => {
@@ -122,13 +115,14 @@ fn check_output(ickb_logic_hash: [u8; 32]) -> Result<u128, Error> {
                 }
 
                 let accounting = amount_2_accounting.entry(deposit_amount).or_insert(default);
-                // Note on Overflow: even locking all CKB supply in receipts using Uint32 maximum
-                // as deposit quantity cannot overflow this counter
                 accounting.receipted += u128::from(deposit_quantity);
             }
             CellType::Udt => {
-                // Note on Overflow: u64 quantities represented with u128, no overflow is possible
-                total_udt_ickb += extract_udt_amount(index, source)?;
+                let amount = extract_udt_amount(index, source)?;
+                if amount > u128::from(u64::MAX) {
+                    return Err(Error::AmountUnreasonablyBig);
+                }
+                total_udt_ickb += amount;
             }
             CellType::Unknown => {}
         }

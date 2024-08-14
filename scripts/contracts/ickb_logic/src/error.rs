@@ -16,6 +16,7 @@ pub enum Error {
     EmptyReceipt,
     ReceiptMismatch,
     AmountMismatch,
+    AmountUnreasonablyBig,
 }
 
 impl From<SysError> for Error {

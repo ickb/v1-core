@@ -1,7 +1,7 @@
 use crate::error::Error;
+use crate::utils::C256;
 use alloc::collections::BTreeMap;
 use core::result::Result;
-use primitive_types::U256;
 
 use ckb_std::{
     ckb_constants::Source,
@@ -101,7 +101,6 @@ fn validate(i: Data, o: Data) -> Result<(), Error> {
     };
 
     // Check that limit order does not lose value
-    // Note on Overflow: u128 quantities represented with u256, no overflow is possible
     if i.ckb * ckb_mul + i.udt * udt_mul > o.ckb * ckb_mul + o.udt * udt_mul {
         return Err(Error::DecreasingValue);
     }
@@ -115,7 +114,6 @@ fn validate(i: Data, o: Data) -> Result<(), Error> {
         }
 
         // DOS prevention: disallow partial match lower than the equivalent of ckb_min_match
-        // Note on Overflow: u128 quantities represented with u256, no overflow is possible
         if !o.ckb_unoccupied.is_zero() && i.ckb < o.ckb + ckb_min_match {
             return Err(Error::InsufficientMatch);
         }
@@ -127,7 +125,6 @@ fn validate(i: Data, o: Data) -> Result<(), Error> {
         }
 
         // DOS prevention: disallow partial match lower than the equivalent of ckb_min_match
-        // Note on Overflow: u128 quantities represented with u256, no overflow is possible
         if !o.udt.is_zero() && i.udt * udt_mul < o.udt * udt_mul + ckb_min_match * ckb_mul {
             return Err(Error::InsufficientMatch);
         }
@@ -144,9 +141,9 @@ struct Order {
 
 #[derive(Clone, Copy, PartialEq)]
 struct Data {
-    ckb: U256,
-    udt: U256,
-    ckb_unoccupied: U256,
+    ckb: C256,
+    udt: C256,
+    ckb_unoccupied: C256,
     info: Info,
 }
 
@@ -155,13 +152,13 @@ struct Info {
     udt_hash: [u8; 32],
     ckb_to_udt: Option<Ratio>,
     udt_to_ckb: Option<Ratio>,
-    ckb_min_match: U256,
+    ckb_min_match: C256,
 }
 
 #[derive(Clone, Copy, PartialEq)]
 struct Ratio {
-    ckb_mul: U256,
-    udt_mul: U256,
+    ckb_mul: C256,
+    udt_mul: C256,
 }
 
 fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Error> {
@@ -211,8 +208,8 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
     };
 
     let mut load_ratio = || -> Result<Option<Ratio>, Error> {
-        let ckb_mul = U256::from(u64::from_le_bytes(load(CKB_MUL_SIZE).try_into().unwrap()));
-        let udt_mul = U256::from(u64::from_le_bytes(load(UDT_MUL_SIZE).try_into().unwrap()));
+        let ckb_mul = C256::from(u64::from_le_bytes(load(CKB_MUL_SIZE).try_into().unwrap()));
+        let udt_mul = C256::from(u64::from_le_bytes(load(UDT_MUL_SIZE).try_into().unwrap()));
         match (ckb_mul.is_zero(), udt_mul.is_zero()) {
             (false, false) => Ok(Some(Ratio { ckb_mul, udt_mul })),
             (true, true) => Ok(None),
@@ -223,7 +220,7 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
     let ckb_to_udt = load_ratio()?;
     let udt_to_ckb = load_ratio()?;
     let ckb_min_match = match load(CKB_MIN_MATCH_LOG_SIZE)[0] {
-        n @ 0..=64 => U256::from(1) << n,
+        n @ 0..=64 => C256::from(1u128 << n),
         _ => return Err(Error::InvalidCkbMinMatchLog),
     };
 
@@ -242,10 +239,10 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
         _ => (),
     };
 
-    let ckb = U256::from(load_cell_capacity(index, source)?);
-    let ckb_unoccupied = ckb - U256::from(load_cell_occupied_capacity(index, source)?);
+    let ckb = C256::from(load_cell_capacity(index, source)?);
+    let ckb_unoccupied = ckb - C256::from(load_cell_occupied_capacity(index, source)?);
 
-    let udt = U256::from(udt_amount);
+    let udt = C256::from(udt_amount);
     let udt_hash = match load_cell_type_hash(index, source)? {
         Some(h) => h,
         None => return Err(Error::MissingUdtType),
