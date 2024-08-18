@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 ckb-std = "0.15.3"
+primitive-types = { version = "0.12.2", default-features = false }

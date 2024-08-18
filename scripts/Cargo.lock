@@ -759,7 +759,6 @@ name = "limit_order"
 version = "1.4.0"
 dependencies = [
  "ckb-std",
- "primitive-types",
  "utils",
 ]
 
@@ -1322,6 +1321,7 @@ name = "utils"
 version = "1.4.0"
 dependencies = [
  "ckb-std",
+ "primitive-types",
 ]
 
 [[package]]

@@ -5,6 +5,7 @@ use ckb_std::{ckb_constants::Source, high_level::load_script_hash};
 
 use utils::{
     extract_accumulated_rate, extract_udt_amount, extract_unused_capacity, has_empty_args,
+    GENESIS_ACCUMULATED_RATE,
 };
 
 use crate::error::Error;
@@ -13,7 +14,7 @@ use crate::{
     celltype::{cell_type_iter, CellType},
     constants::{
         CKB_MAXIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT, CKB_MINIMUM_UNOCCUPIED_CAPACITY_PER_DEPOSIT,
-        GENESIS_ACCUMULATED_RATE, ICKB_SOFT_CAP_PER_DEPOSIT,
+        ICKB_SOFT_CAP_PER_DEPOSIT,
     },
 };
 

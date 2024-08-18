@@ -1,7 +1,7 @@
 use crate::error::Error;
-use crate::utils::C256;
 use alloc::collections::BTreeMap;
 use core::result::Result;
+use utils::{extract_metapoint, has_empty_args, MetaPoint, C256, UDT_SIZE};
 
 use ckb_std::{
     ckb_constants::Source,
@@ -11,7 +11,6 @@ use ckb_std::{
     },
     syscalls::load_cell_data,
 };
-use utils::{extract_metapoint, has_empty_args, MetaPoint, UDT_SIZE};
 
 pub fn main() -> Result<(), Error> {
     if !has_empty_args()? {

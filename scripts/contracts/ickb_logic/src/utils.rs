@@ -5,10 +5,7 @@ use ckb_std::{
     syscalls::{load_cell_data, SysError},
 };
 
-use crate::{
-    constants::{DAO_DEPOSIT_DATA, DAO_DEPOSIT_DATA_SIZE},
-    error::Error,
-};
+use crate::error::Error;
 
 // Data layout in bytes
 // {
@@ -46,12 +43,4 @@ pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u32, u64), 
     let deposit_amount = u64::from_le_bytes(load(DEPOSIT_AMOUNT_SIZE).try_into().unwrap());
 
     Ok((deposit_quantity, deposit_amount))
-}
-
-pub fn is_deposit_cell(index: usize, source: Source) -> bool {
-    let mut data = DAO_DEPOSIT_DATA.clone();
-    match load_cell_data(&mut data, 0, index, source) {
-        Ok(DAO_DEPOSIT_DATA_SIZE) => data == DAO_DEPOSIT_DATA,
-        _ => false,
-    }
 }

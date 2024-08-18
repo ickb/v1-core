@@ -6,7 +6,7 @@ use ckb_std::{
     high_level::{load_cell_lock_hash, load_cell_type_hash, load_script_hash, QueryIter},
     syscalls::{load_cell_data, SysError},
 };
-use utils::{extract_metapoint, has_empty_args, MetaPoint};
+use utils::{extract_metapoint, has_empty_args, is_dao, is_withdrawal_request_data, MetaPoint};
 
 use crate::error::Error;
 
@@ -38,6 +38,12 @@ pub fn main() -> Result<(), Error> {
                 }
                 (true, false) => {
                     // Owned Cell
+
+                    // Check that is a Withdrawal Request
+                    if !is_dao(index, source)? || !is_withdrawal_request_data(index, source) {
+                        return Err(Error::NotWithdrawalRequest);
+                    }
+
                     let metapoint = extract_metapoint(index, source)?;
                     let accounting = metapoint_2_accounting.entry(metapoint).or_insert(default);
                     accounting.owned += 1;

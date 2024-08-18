@@ -8,4 +8,3 @@ edition = "2021"
 [dependencies]
 ckb-std = "0.15.3"
 utils = { path = "../utils" }
-primitive-types = { version = "0.12.2", default-features = false }

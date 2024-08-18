@@ -9,6 +9,7 @@ pub enum Error {
     Encoding,
     // Add customized errors here...
     NotEmptyArgs,
+    NotWithdrawalRequest,
     ScriptMisuse,
     Mismatch,
 }

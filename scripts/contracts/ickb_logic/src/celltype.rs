@@ -10,21 +10,15 @@ use ckb_std::{
     high_level::{load_cell_lock_hash, load_cell_type_hash},
     syscalls::SysError,
 };
+use utils::{is_deposit_data, DAO_HASH, XUDT_CODE_HASH, XUDT_HASH_TYPE};
 
-use crate::{
-    constants::{
-        DAO_ARGS, DAO_CODE_HASH, DAO_HASH_TYPE, XUDT_ARGS_FLAGS, XUDT_CODE_HASH, XUDT_HASH_TYPE,
-    },
-    error::Error,
-    utils::is_deposit_cell,
-};
+use crate::{constants::XUDT_ARGS_FLAGS, error::Error};
 
 pub struct CellTypeIter {
     index: usize,
     source: Source,
     ickb_logic_hash: [u8; 32],
     ickb_xudt_hash: [u8; 32],
-    dao_hash: [u8; 32],
 }
 
 pub enum CellType {
@@ -99,9 +93,9 @@ enum ScriptType {
 
 impl CellTypeIter {
     fn script_type(&self, h: [u8; 32]) -> ScriptType {
-        if h == self.dao_hash {
+        if h == DAO_HASH {
             // This condition checks that's a deposit, not a withdrawal request or an unknown cell
-            if is_deposit_cell(self.index, self.source) {
+            if is_deposit_data(self.index, self.source) {
                 return ScriptType::DaoDeposit;
             } else {
                 return ScriptType::Unknown;
@@ -132,21 +126,10 @@ pub fn cell_type_iter(source: Source, ickb_logic_hash: [u8; 32]) -> CellTypeIter
         .try_into()
         .unwrap();
 
-    let dao_hash: [u8; 32] = ScriptBuilder::default()
-        .code_hash(Byte32::from_slice(&DAO_CODE_HASH).unwrap())
-        .hash_type(DAO_HASH_TYPE.into())
-        .args(Bytes::from(DAO_ARGS.as_slice()).pack())
-        .build()
-        .calc_script_hash()
-        .as_slice()
-        .try_into()
-        .unwrap();
-
     CellTypeIter {
         index: 0,
         source,
         ickb_logic_hash,
         ickb_xudt_hash,
-        dao_hash,
     }
 }
