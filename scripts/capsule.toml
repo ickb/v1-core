@@ -4,7 +4,7 @@
 # workspace_dir = "."
 
 # capsule version
-version = "0.10.4 eff02bf"
+version = "0.10.5 04fd58c"
 
 [[contracts]]
 name = "ickb_logic"
