@@ -1,16 +1,16 @@
 [[cells]]
 name = "ICKB_LOGIC"
-enable_type_id = true 
+enable_type_id = false
 location = { file = "../../build/release/ickb_logic" }
 
 [[cells]]
 name = "LIMIT_ORDER"
-enable_type_id = true 
+enable_type_id = false
 location = { file = "../../build/release/limit_order" }
 
 [[cells]]
 name = "OWNED_OWNER"
-enable_type_id = true 
+enable_type_id = false
 location = { file = "../../build/release/owned_owner" }
 
 
@@ -59,8 +59,8 @@ cells = [
   "SECP256K1_BLAKE160_MULTISIG"
 ]
 
-# The lock script set to output cells
+# Set the secp256k1_blake160 zero lock as the lock script for output cells
 [lock]
 code_hash = "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8"
-args = "0x71299e6152c5010afedcac39cef928bdf281b1ac"
+args = "0x0000000000000000000000000000000000000000"
 hash_type = "type"
