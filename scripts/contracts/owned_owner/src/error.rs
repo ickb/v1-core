@@ -16,7 +16,7 @@ pub enum Error {
 
 impl From<SysError> for Error {
     fn from(err: SysError) -> Self {
-        use SysError::*;
+        use SysError::{Encoding, IndexOutOfBound, ItemMissing, LengthNotEnough, Unknown};
         match err {
             IndexOutOfBound => Self::IndexOutOfBound,
             ItemMissing => Self::ItemMissing,

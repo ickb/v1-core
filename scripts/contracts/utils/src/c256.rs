@@ -6,6 +6,7 @@ use primitive_types::U256;
 pub struct C256(U256);
 
 impl C256 {
+    #[must_use]
     pub fn is_zero(&self) -> bool {
         self.0.is_zero()
     }

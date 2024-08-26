@@ -65,7 +65,7 @@ fn check_input(ickb_logic_hash: [u8; 32]) -> Result<(u128, u128, u128), Error> {
         }
     }
 
-    return Ok((total_udt_ickb, total_receipts_ickb, total_deposits_ickb));
+    Ok((total_udt_ickb, total_receipts_ickb, total_deposits_ickb))
 }
 
 fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Error> {
@@ -80,7 +80,7 @@ fn deposit_to_ickb(index: usize, source: Source, amount: u64) -> Result<u128, Er
         return Ok(ickb_amount - (ickb_amount - ICKB_SOFT_CAP_PER_DEPOSIT) / 10);
     }
 
-    return Ok(ickb_amount);
+    Ok(ickb_amount)
 }
 
 fn check_output(ickb_logic_hash: [u8; 32]) -> Result<u128, Error> {

@@ -28,7 +28,7 @@ pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u32, u64), 
     let mut load = |size: usize| {
         let field_data: &[u8];
         (field_data, raw_data) = raw_data.split_at(size);
-        return field_data;
+        field_data
     };
 
     //Check that union id is indeed zero

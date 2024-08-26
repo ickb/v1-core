@@ -33,8 +33,8 @@ pub const XUDT_HASH_TYPE: u8 = ScriptHashType::Data1 as u8;
 
 const fn from_hex(hex_string: &str) -> [u8; 32] {
     if hex_string.len() != 2 + 2 * 32
-        || hex_string.as_bytes()[0] != ('0' as u8)
-        || hex_string.as_bytes()[1] != ('x' as u8)
+        || hex_string.as_bytes()[0] != b'0'
+        || hex_string.as_bytes()[1] != b'x'
     {
         panic!("Invalid input hexadecimal string")
     }
@@ -49,17 +49,13 @@ const fn from_hex(hex_string: &str) -> [u8; 32] {
         i += 1;
     }
 
-    return result;
+    result
 }
 
 const fn hex_value(hc: u8) -> u8 {
-    const _0: u8 = '0' as u8;
-    const _9: u8 = '9' as u8;
-    const A: u8 = 'a' as u8;
-    const F: u8 = 'f' as u8;
     match hc {
-        _0..=_9 => hc - _0,
-        A..=F => hc - A + 10,
+        b'0'..=b'9' => hc - b'0',
+        b'a'..=b'f' => hc - b'a' + 10,
         _ => panic!("Invalid input hexadecimal character"),
     }
 }

@@ -39,8 +39,8 @@ pub fn extract_udt_amount(index: usize, source: Source) -> Result<u128, SysError
     let mut data = [0u8; UDT_SIZE];
     match load_cell_data(&mut data, 0, index, source) {
         Ok(UDT_SIZE) | Err(SysError::LengthNotEnough(_)) => Ok(u128::from_le_bytes(data)),
-        Ok(_) => return Err(SysError::Encoding),
-        Err(err) => return Err(err),
+        Ok(_) => Err(SysError::Encoding),
+        Err(err) => Err(err),
     }
 }
 
@@ -55,8 +55,8 @@ pub fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, Sys
     let mut data = [0u8; AR_SIZE];
     match load_header(&mut data, AR_OFFSET, index, source) {
         Ok(AR_SIZE) | Err(SysError::LengthNotEnough(_)) => Ok(u64::from_le_bytes(data)),
-        Ok(_) => return Err(SysError::Encoding),
-        Err(err) => return Err(err),
+        Ok(_) => Err(SysError::Encoding),
+        Err(err) => Err(err),
     }
 }
 
@@ -75,11 +75,11 @@ pub fn extract_metapoint(index: usize, source: Source) -> Result<MetaPoint, SysE
     load_input_by_field(&mut d, 0, index, source, InputField::OutPoint)?;
     Ok(MetaPoint {
         tx_hash: Some(d[..TX_HASH_SIZE].try_into().unwrap()),
-        index: u32::from_le_bytes(
+        index: i64::from(u32::from_le_bytes(
             d[TX_HASH_SIZE..TX_HASH_SIZE + INDEX_SIZE]
                 .try_into()
                 .unwrap(),
-        ) as i64,
+        )),
     })
 }
 

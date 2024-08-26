@@ -44,7 +44,7 @@ impl Loader {
             TestEnv::Debug => "debug",
             TestEnv::Release => "release",
         };
-        let dir = env::current_dir().unwrap();
+        let _dir = env::current_dir().unwrap();
         let mut base_path = PathBuf::new();
         // cargo may use a different cwd when running tests, for example:
         // when running debug in vscode, it will use workspace root as cwd by default,
@@ -60,6 +60,7 @@ impl Loader {
         Loader(base_path)
     }
 
+    #[must_use]
     pub fn load_binary(&self, name: &str) -> Bytes {
         let mut path = self.0.clone();
         path.push(name);

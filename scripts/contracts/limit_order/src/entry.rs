@@ -40,7 +40,7 @@ pub fn main() -> Result<(), Error> {
                     let metapoint = extract_metapoint(index, source)?;
                     let io_accounting = metapoint_2_order.entry(metapoint).or_insert(default);
                     // No two cells exists with the same outpoint, so this should not happen
-                    if io_accounting[source as usize - 1].has_master == true {
+                    if io_accounting[source as usize - 1].has_master {
                         return Err(Error::DuplicatedMaster);
                     }
                     io_accounting[source as usize - 1].has_master = true;
@@ -49,7 +49,7 @@ pub fn main() -> Result<(), Error> {
                     // Limit Order Cell
                     let (metapoint, data) = extract_order(index, source)?;
                     let io_accounting = metapoint_2_order.entry(metapoint).or_insert(default);
-                    if io_accounting[source as usize - 1].data != None {
+                    if io_accounting[source as usize - 1].data.is_some() {
                         return Err(Error::SameMaster);
                     }
                     io_accounting[source as usize - 1].data = Some(data);
@@ -172,7 +172,7 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
     let mut load = |size: usize| {
         let field_data: &[u8];
         (field_data, raw_data) = raw_data.split_at(size);
-        return field_data;
+        field_data
     };
 
     let udt_amount = u128::from_le_bytes(load(UDT_SIZE).try_into().unwrap());
@@ -194,7 +194,7 @@ fn extract_order(index: usize, source: Source) -> Result<(MetaPoint, Data), Erro
             let metapoint = extract_metapoint(index, source)?;
             MetaPoint {
                 tx_hash: metapoint.tx_hash,
-                index: metapoint.index + master_distance as i64,
+                index: metapoint.index + i64::from(master_distance),
             }
         } else {
             let tx_hash: [u8; 32] = raw_tx_hash.try_into().unwrap();

@@ -97,9 +97,8 @@ impl CellTypeIter {
             // This condition checks that's a deposit, not a withdrawal request or an unknown cell
             if is_deposit_data(self.index, self.source) {
                 return ScriptType::DaoDeposit;
-            } else {
-                return ScriptType::Unknown;
             }
+            return ScriptType::Unknown;
         }
 
         if h == self.ickb_xudt_hash {
@@ -110,7 +109,7 @@ impl CellTypeIter {
             return ScriptType::IckbLogic;
         }
 
-        return ScriptType::Unknown;
+        ScriptType::Unknown
     }
 }
 
