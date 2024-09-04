@@ -17,13 +17,9 @@ struct OutPoint {
 
 /* iCKB Logic data types */
 
-struct ReceiptDataV0 {
+struct ReceiptData {
     deposit_quantity:  Uint32,
     deposit_amount:    Uint64,
-}
-
-union ReceiptData {
-    ReceiptDataV0,
 }
 
 /* Owned Owner data types */

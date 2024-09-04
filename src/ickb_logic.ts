@@ -268,7 +268,7 @@ export function ickbDelta(tx: TransactionSkeletonType, config: ConfigAdapter) {
     if (scriptEq(c.cellOutput.type, ickbLogic)) {
       const header = (c as I8Cell).cellOutput.type![headerDeps][0];
       const { depositQuantity: quantity, depositAmount: amount } =
-        ReceiptData.unpack(c.data).value;
+        ReceiptData.unpack(c.data);
       ickbDelta += ickbValue(amount, header) * BigInt(quantity);
     }
   }
@@ -364,14 +364,11 @@ export function addReceiptDepositsChange(
     const depositAmount = BigInt(c.cellOutput.capacity) - depositUsedCapacity;
     let v = depositAmount2Quantity.get(depositAmount);
     if (v) {
-      v.value.depositQuantity += 1;
+      v.depositQuantity += 1;
     } else {
       depositAmount2Quantity.set(depositAmount, {
-        type: "ReceiptDataV0",
-        value: {
-          depositQuantity: 1,
-          depositAmount,
-        },
+        depositQuantity: 1,
+        depositAmount,
       });
     }
   }

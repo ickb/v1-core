@@ -22,19 +22,12 @@ function createFallbackFixedBytesCodec(byteLength: number) {
 
 export const Byte32 = createFallbackFixedBytesCodec(32);
 
-export const ReceiptDataV0 = struct(
+export const ReceiptData = struct(
   {
     depositQuantity: Uint32,
     depositAmount: Uint64,
   },
   ["depositQuantity", "depositAmount"],
-);
-
-export const ReceiptData = union(
-  {
-    ReceiptDataV0,
-  },
-  ["ReceiptDataV0"],
 );
 
 export const OwnedOwnerData = struct(

@@ -9,12 +9,11 @@ use crate::error::Error;
 
 // Data layout in bytes
 // {
-const UNION_ID_SIZE: usize = 4;
 const DEPOSIT_QUANTITY_SIZE: usize = 4;
 const DEPOSIT_AMOUNT_SIZE: usize = 8;
 // }
 
-const RECEIPT_SIZE: usize = UNION_ID_SIZE + DEPOSIT_QUANTITY_SIZE + DEPOSIT_AMOUNT_SIZE;
+const RECEIPT_SIZE: usize = DEPOSIT_QUANTITY_SIZE + DEPOSIT_AMOUNT_SIZE;
 
 pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u32, u64), Error> {
     let mut data = [0u8; RECEIPT_SIZE];
@@ -30,11 +29,6 @@ pub fn extract_receipt_data(index: usize, source: Source) -> Result<(u32, u64), 
         (field_data, raw_data) = raw_data.split_at(size);
         field_data
     };
-
-    //Check that union id is indeed zero
-    if u32::from_le_bytes(load(UNION_ID_SIZE).try_into().unwrap()) != 0 {
-        return Err(Error::InvalidUnionId);
-    }
 
     // The quantity of the deposits
     let deposit_quantity = u32::from_le_bytes(load(DEPOSIT_QUANTITY_SIZE).try_into().unwrap());
