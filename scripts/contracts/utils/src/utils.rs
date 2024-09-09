@@ -62,6 +62,7 @@ pub fn extract_accumulated_rate(index: usize, source: Source) -> Result<u64, Sys
 
 const TX_HASH_SIZE: usize = 32;
 const INDEX_SIZE: usize = 4;
+const OUT_POINT_SIZE: usize = TX_HASH_SIZE + INDEX_SIZE;
 
 pub fn extract_metapoint(index: usize, source: Source) -> Result<MetaPoint, SysError> {
     if source == Source::Output {
@@ -71,16 +72,15 @@ pub fn extract_metapoint(index: usize, source: Source) -> Result<MetaPoint, SysE
         });
     }
 
-    let mut d = [0u8; TX_HASH_SIZE + INDEX_SIZE];
-    load_input_by_field(&mut d, 0, index, source, InputField::OutPoint)?;
-    Ok(MetaPoint {
-        tx_hash: Some(d[..TX_HASH_SIZE].try_into().unwrap()),
-        index: i64::from(u32::from_le_bytes(
-            d[TX_HASH_SIZE..TX_HASH_SIZE + INDEX_SIZE]
-                .try_into()
-                .unwrap(),
-        )),
-    })
+    let mut d = [0u8; OUT_POINT_SIZE];
+    match load_input_by_field(&mut d, 0, index, source, InputField::OutPoint) {
+        Ok(OUT_POINT_SIZE) => Ok(MetaPoint {
+            tx_hash: Some(d[..TX_HASH_SIZE].try_into().unwrap()),
+            index: i64::from(u32::from_le_bytes(d[TX_HASH_SIZE..].try_into().unwrap())),
+        }),
+        Ok(_) => Err(SysError::Encoding),
+        Err(err) => Err(err),
+    }
 }
 
 // MetaPoint is an extension of OutPoint functionalities
