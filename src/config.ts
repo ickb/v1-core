@@ -9,21 +9,21 @@ import {
 } from "@ickb/lumos-utils";
 import type { Chain } from "@ickb/lumos-utils";
 import devnetMigration from "../scripts/deployment/devnet/migrations/latest.json";
-import testnetMigration from "../scripts/deployment/testnet/migrations/2024-08-01-090441.json";
+import testnetMigration from "../scripts/deployment/testnet/migrations/2024-09-12-141730.json";
+import mainnetMigration from "../scripts/deployment/mainnet/migrations/2024-09-12-151119.json";
 
-const errorConfigNotAvailable = "The requested config is not available";
 const errorMissingScriptInConfig =
   "The requested script is missing in the old config";
 export function getIckbScriptConfigs(
   chain: Chain,
   oldScriptConfigs: { [id: string]: ScriptConfigAdapter },
 ) {
-  if (chain === "mainnet") {
-    throw Error(errorConfigNotAvailable);
-  }
-
   const { cell_recipes, dep_group_recipes } =
-    chain === "testnet" ? testnetMigration : devnetMigration;
+    chain === "mainnet"
+      ? mainnetMigration
+      : chain === "testnet"
+        ? testnetMigration
+        : devnetMigration;
   const { tx_hash, index } = dep_group_recipes[0];
   const outPoint = I8OutPoint.from({ txHash: tx_hash, index: hex(index) });
 
