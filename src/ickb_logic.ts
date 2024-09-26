@@ -225,6 +225,8 @@ export function ickbRequestWithdrawalFrom(
   return daoRequestWithdrawalFrom(tx, deposits, ownedOwnerScript(config));
 }
 
+// addWithdrawalRequestGroups implements the melt of Owned Withdrawal Request and Owner cell
+// See: https://github.com/ickb/proposal#melt-owned-owner
 export function addWithdrawalRequestGroups(
   tx: TransactionSkeletonType,
   withdrawalRequestGroups: readonly WithdrawalRequestGroup[],
