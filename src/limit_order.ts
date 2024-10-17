@@ -5,11 +5,12 @@ import {
   I8Cell,
   I8Script,
   addCells,
-  typeSifter,
-  lockExpanderFrom,
   I8OutPoint,
   hex,
   type ConfigAdapter,
+  i8ScriptPadding,
+  scriptEq,
+  CKB,
 } from "@ickb/lumos-utils";
 import { ickbUdtType } from "./ickb_logic.js";
 import { OrderData } from "./codec.js";
@@ -21,14 +22,22 @@ export type MyOrder = Order & {
 
 export type Order = {
   cell: I8Cell;
-  master: { outPoint: I8OutPoint };
   info: Required<BaseOrderInfo> & {
+    isMint: boolean;
+    masterOutpoint: Readonly<I8OutPoint>;
     // Computed properties
+    ckbOccupied: bigint;
+    ckbUnoccupied: bigint;
+    isCkb2Udt: boolean; // It can also be dual ratio
+    isUdt2Ckb: boolean; // It can also be dual ratio
+    isDualRatio: boolean;
     ckbMinMatch: bigint;
     isCkb2UdtMatchable: boolean;
     isUdt2CkbMatchable: boolean;
     isMatchable: boolean;
-    isDualRatio: boolean;
+    // A competition progress, relProgress= 100*Number(absProgress)/Number(absTotal)
+    absProgress: bigint;
+    absTotal: bigint;
   };
 };
 
@@ -45,126 +54,121 @@ export type OrderRatio = {
   udtMultiplier: bigint;
 };
 
-const padding =
-  "0x0000000000000000000000000000000000000000000000000000000000000000";
+function ratioEq(r0: OrderRatio, r1: OrderRatio) {
+  return (
+    r0.ckbMultiplier === r1.ckbMultiplier &&
+    r0.udtMultiplier === r1.udtMultiplier
+  );
+}
+
+function OrderInfoEq(i0: BaseOrderInfo, i1: BaseOrderInfo) {
+  return (
+    ratioEq(i0.ckbToUdt, i1.ckbToUdt) &&
+    ratioEq(i0.udtToCkb, i1.udtToCkb) &&
+    i0.ckbMinMatchLog === i1.ckbMinMatchLog
+  );
+}
 
 export function orderSifter(
   inputs: readonly Cell[],
   accountLockExpander: (c: Cell) => I8Script | undefined,
+  getTxOutputs: (txHash: string) => Readonly<Cell[]>,
   config: ConfigAdapter,
   udtType = ickbUdtType(config),
 ) {
   const orderScript = limitOrderScript(config);
-  let { types, notTypes: unknowns } = typeSifter(
+
+  // Sift and group matching orders and master cells of udtType
+  const { groups, unknowns } = rawSifter(
     inputs,
-    udtType,
-    lockExpanderFrom(orderScript),
-  );
-  let masters: I8Cell[] = [];
-  ({ types: masters, notTypes: unknowns } = typeSifter(
-    unknowns,
-    orderScript,
     accountLockExpander,
-  ));
-  const key = (o: OutPoint) => o.txHash + o.index;
-  const outPoint2Master = new Map(
-    masters.map((c) => [key(c.outPoint!), c as MyOrder["master"]]),
+    orderScript,
+    udtType,
   );
 
-  const ckbOccupiedMax = ckbOrderOccupiedMax(orderScript, udtType);
+  // Fetch the original mint transactions of the orders found
+  const mints = mintsOf(
+    [...groups.values()].map(
+      (g) => g.master?.outPoint ?? g.orders[0].info.masterOutpoint,
+    ),
+    getTxOutputs,
+    orderScript,
+    udtType,
+  );
 
+  // Validate that orders are in line with the mints and not forged
   const orders: Order[] = [];
   const myOrders: MyOrder[] = [];
-  for (const cell of types) {
-    let o: UnpackedOrder;
-    try {
-      o = OrderData.unpack(cell.data);
-    } catch (e: unknown) {
-      unknowns.push(cell);
+  for (const [k, group] of groups) {
+    const mint = mints.get(k);
+    if (mint === undefined) {
+      // No mint group found, all orders in this group are forged, so discard them
+      const m = group.master === undefined ? [] : [group.master];
+      unknowns.push(...m, ...group.orders.map((o) => o.cell));
       continue;
     }
 
-    const {
-      ckbToUdt: c2u,
-      udtToCkb: u2c,
-      ckbMinMatchLog: cmml,
-    } = o.value.orderInfo;
-    const ckbToUdt = normalizeRatio(c2u);
-    const udtToCkb = normalizeRatio(u2c);
-    const ckbMinMatchLog = normalizeCkbMinMatchLog(cmml);
+    // Find the order that has the best value, while keeping the mint parameters
+    let iBest = -1;
+    let best: Order = mint;
+    for (let i = 0; i < group.orders.length; i++) {
+      const o = group.orders[i];
 
-    // Check that the order is valid
-    if (
-      ckbToUdt.ckbMultiplier !== c2u.ckbMultiplier ||
-      ckbToUdt.udtMultiplier !== c2u.udtMultiplier ||
-      udtToCkb.ckbMultiplier !== u2c.ckbMultiplier ||
-      udtToCkb.udtMultiplier !== u2c.udtMultiplier ||
-      ckbMinMatchLog !== cmml ||
-      (o.type === "MintOrderData" && o.value.padding !== padding)
-    ) {
-      unknowns.push(cell);
+      // Check that parameters are the the mint parameters
+      if (
+        !OrderInfoEq(mint.info, o.info) ||
+        !scriptEq(mint.cell.cellOutput.type, o.cell.cellOutput.type) ||
+        o.info.absTotal < mint.info.absTotal
+      ) {
+        // Discard current forged order
+        unknowns.push(o.cell);
+        continue;
+      }
+
+      // Pick order with best absProgress
+      if (o.info.absProgress < best.info.absProgress) {
+        // Discard current forged order
+        unknowns.push(o.cell);
+        continue;
+      }
+
+      // At equality of absProgress, give preference to newly minted orders
+      if (o.info.absProgress === best.info.absProgress && !o.info.isMint) {
+        // Discard current forged order
+        unknowns.push(o.cell);
+        continue;
+      }
+
+      // Discard the old Best order
+      if (iBest >= 0) {
+        unknowns.push(best.cell);
+      }
+
+      iBest = i;
+      best = o;
+    }
+
+    // Discard master cell if group doesn't contain a valid match
+    if (iBest === -1) {
+      if (group.master !== undefined) {
+        unknowns.push(group.master);
+      }
       continue;
     }
 
-    const ckbMinMatch = 1n << BigInt(ckbMinMatchLog);
-    const udtAmount = o.udtAmount;
-    const ckbAmount = BigInt(cell.cellOutput.capacity);
-    const ckbUnused = ckbAmount - ckbOccupiedMax;
-    const isCkb2UdtMatchable =
-      ckbToUdt !== normalizedInvalidRatio && ckbUnused > 0n;
-    const isUdt2CkbMatchable =
-      udtToCkb !== normalizedInvalidRatio && udtAmount > 0n;
-    const isMatchable = isCkb2UdtMatchable || isUdt2CkbMatchable;
-    const isDualRatio =
-      ckbToUdt !== normalizedInvalidRatio &&
-      udtToCkb !== normalizedInvalidRatio;
-
-    let info: Order["info"] = Object.freeze({
-      ckbToUdt,
-      udtToCkb,
-      ckbMinMatchLog,
-      ckbMinMatch,
-      udtAmount,
-      ckbAmount,
-      isCkb2UdtMatchable,
-      isUdt2CkbMatchable,
-      isMatchable,
-      isDualRatio,
-    });
-
-    const masterOutPoint = I8OutPoint.from(
-      o.type === "MintOrderData"
-        ? {
-            txHash: cell.outPoint!.txHash,
-            index: hex(Number(cell.outPoint!.index) + o.value.masterDistance),
-          }
-        : o.value.masterOutpoint,
-    );
-    const k = key(masterOutPoint);
-    const master = outPoint2Master.get(k);
-    if (master) {
-      // Order owned by the Account
-      outPoint2Master.delete(k);
+    // Add the current best order and maybe master to the results
+    if (group.master !== undefined) {
+      // Order owned by Account
       myOrders.push(
         Object.freeze({
-          cell,
-          master,
-          info,
+          ...best,
+          master: group.master,
         }),
       );
     } else {
-      orders.push(
-        Object.freeze({
-          cell,
-          master: Object.freeze({ outPoint: masterOutPoint }),
-          info,
-        }),
-      );
+      // Order not owned by Account
+      orders.push(Object.freeze(best));
     }
-  }
-
-  for (const c of outPoint2Master.values()) {
-    unknowns.push(c);
   }
 
   return {
@@ -172,6 +176,210 @@ export function orderSifter(
     orders,
     notOrders: unknowns,
   };
+}
+
+function mintsOf(
+  masterOutpoints: readonly I8OutPoint[],
+  getTxOutputs: (txHash: string) => Readonly<Cell[]>,
+  orderScript: I8Script,
+  udtType: I8Script,
+) {
+  const mints = new Map<string, MyOrder>();
+  const dummyAccountLockExpander = (c: Cell) =>
+    I8Script.from({ ...i8ScriptPadding, ...c.cellOutput.lock });
+  for (const txHash of new Set(masterOutpoints.map((v) => v.txHash))) {
+    // Fetch the original mint transactions of the masterOutpoints
+    for (const [k, g] of rawSifter(
+      getTxOutputs(txHash),
+      dummyAccountLockExpander,
+      orderScript,
+      udtType,
+    ).groups) {
+      // Keep only valid mint transactions
+      if (
+        g.master === undefined ||
+        g.orders.length !== 1 ||
+        !g.orders[0].info.isMint
+      ) {
+        continue;
+      }
+
+      mints.set(k, {
+        ...g.orders[0],
+        master: g.master,
+      });
+    }
+  }
+
+  return mints;
+}
+
+function rawSifter(
+  inputs: readonly Cell[],
+  accountLockExpander: (c: Cell) => I8Script | undefined,
+  orderScript: I8Script,
+  udtType: I8Script,
+) {
+  const groups = new Map<
+    string,
+    {
+      master: I8Cell | undefined;
+      orders: Order[];
+    }
+  >();
+
+  // Utility for creating and/or getting group entries of the groups map
+  const groupOf = (o: OutPoint) => {
+    const key = o.txHash + o.index;
+    let group = groups.get(key);
+    if (group === undefined) {
+      group = {
+        master: undefined,
+        orders: [],
+      };
+      groups.set(key, group);
+    }
+    return group;
+  };
+
+  const unknowns: Cell[] = [];
+  for (const c of inputs) {
+    const { lock, type } = c.cellOutput;
+    if (scriptEq(type, orderScript)) {
+      // Master cell
+      const lock = accountLockExpander(c);
+      if (lock) {
+        groupOf(c.outPoint!).master = I8Cell.from({
+          ...c,
+          cellOutput: {
+            lock,
+            type: orderScript,
+            capacity: c.cellOutput.capacity,
+          },
+        });
+        continue;
+      }
+    } else if (scriptEq(lock, orderScript) && scriptEq(type, udtType)) {
+      const info = extractOrderInfo(c);
+      if (info !== undefined) {
+        // Limit Order
+        groupOf(info.masterOutpoint).orders.push({
+          cell: I8Cell.from({
+            ...c,
+            cellOutput: {
+              lock: orderScript,
+              type: udtType,
+              capacity: c.cellOutput.capacity,
+            },
+          }),
+          info,
+        });
+        continue;
+      }
+    }
+
+    // Discard unknown cell
+    unknowns.push(c);
+  }
+
+  return { groups, unknowns };
+}
+
+function extractOrderInfo(cell: Cell) {
+  let o: UnpackedOrder;
+  try {
+    o = OrderData.unpack(cell.data);
+  } catch {
+    return;
+  }
+
+  const orderInfo = o.value.orderInfo;
+  const ckbToUdt = normalizeRatio(orderInfo.ckbToUdt);
+  const udtToCkb = normalizeRatio(orderInfo.udtToCkb);
+  const ckbMinMatchLog = normalizeCkbMinMatchLog(orderInfo.ckbMinMatchLog);
+
+  // Check that the order is valid
+  if (
+    !OrderInfoEq({ ckbToUdt, udtToCkb, ckbMinMatchLog }, orderInfo) ||
+    (o.type === "MintOrderData" && o.value.padding !== padding) ||
+    cell.cellOutput.type === undefined ||
+    cell.cellOutput.type.args.length < 2 // args must at least contain "0x"
+  ) {
+    return;
+  }
+
+  const isMint = o.type === "MintOrderData";
+
+  const masterOutpoint = I8OutPoint.from(
+    o.type === "MintOrderData"
+      ? {
+          txHash: cell.outPoint!.txHash,
+          index: hex(Number(cell.outPoint!.index) + o.value.masterDistance),
+        }
+      : o.value.masterOutpoint,
+  );
+
+  const ckbMinMatch = 1n << BigInt(ckbMinMatchLog);
+  const udtAmount = o.udtAmount;
+  const ckbAmount = BigInt(cell.cellOutput.capacity);
+  const ckbOccupied =
+    orderMinCkb + BigInt((cell.cellOutput.type.args.length - 2) / 2) * CKB;
+  const ckbUnoccupied = ckbAmount - ckbOccupied;
+
+  const isCkb2Udt = ckbToUdt !== zeroRatio;
+  const isUdt2Ckb = udtToCkb !== zeroRatio;
+  const isDualRatio = isCkb2Udt && isUdt2Ckb;
+
+  const ckb2UdtValue = isCkb2Udt
+    ? ckbUnoccupied * ckbToUdt.ckbMultiplier +
+      udtAmount * ckbToUdt.udtMultiplier
+    : 0n;
+
+  const udt2CkbValue = isUdt2Ckb
+    ? ckbUnoccupied * udtToCkb.ckbMultiplier +
+      udtAmount * udtToCkb.udtMultiplier
+    : 0n;
+
+  const absTotal =
+    ckb2UdtValue === 0n
+      ? udt2CkbValue
+      : udt2CkbValue === 0n
+        ? ckb2UdtValue
+        : // Take the average of the two values for dual ratio orders
+          (ckb2UdtValue * udtToCkb.ckbMultiplier * udtToCkb.udtMultiplier +
+            udt2CkbValue * ckbToUdt.ckbMultiplier * ckbToUdt.udtMultiplier) >>
+          1n;
+
+  const absProgress = isDualRatio
+    ? absTotal
+    : isCkb2Udt
+      ? udtAmount * ckbToUdt.udtMultiplier
+      : ckbUnoccupied * udtToCkb.ckbMultiplier;
+
+  const isCkb2UdtMatchable = isCkb2Udt && ckbUnoccupied > 0n;
+  const isUdt2CkbMatchable = isUdt2Ckb && udtAmount > 0n;
+  const isMatchable = isCkb2UdtMatchable || isUdt2CkbMatchable;
+
+  return Object.freeze({
+    isMint,
+    masterOutpoint,
+    ckbToUdt,
+    udtToCkb,
+    ckbMinMatchLog,
+    ckbMinMatch,
+    udtAmount,
+    ckbAmount,
+    ckbOccupied,
+    ckbUnoccupied,
+    absTotal,
+    absProgress,
+    isCkb2Udt,
+    isUdt2Ckb,
+    isDualRatio,
+    isCkb2UdtMatchable,
+    isUdt2CkbMatchable,
+    isMatchable,
+  });
 }
 
 export const defaultCkbMinMatchLog = 33; // ~ 86 CKB
@@ -190,18 +398,15 @@ export function orderFrom(
   config: ConfigAdapter,
   ckbAmount = 0n, //it will use way more CKB than expressed in ckbAmount
   udtAmount = 0n,
-  ckbToUdt = normalizedInvalidRatio,
-  udtToCkb = normalizedInvalidRatio,
+  ckbToUdt = zeroRatio,
+  udtToCkb = zeroRatio,
   ckbMinMatchLog = defaultCkbMinMatchLog,
   udtType = ickbUdtType(config),
 ) {
   ckbToUdt = normalizeRatio(ckbToUdt);
   udtToCkb = normalizeRatio(udtToCkb);
   ckbMinMatchLog = normalizeCkbMinMatchLog(ckbMinMatchLog);
-  if (
-    ckbToUdt === normalizedInvalidRatio &&
-    udtToCkb === normalizedInvalidRatio
-  ) {
+  if (ckbToUdt === zeroRatio && udtToCkb === zeroRatio) {
     throw Error(errorInvalidRatio);
   }
 
@@ -293,7 +498,7 @@ export function orderSatisfy(
           udtAmount: udtOut,
           type: "MatchOrderData",
           value: {
-            masterOutpoint: o.master.outPoint,
+            masterOutpoint: o.info.masterOutpoint,
             orderInfo: o.info,
           },
         }),
@@ -399,40 +604,38 @@ function normalizeCkbMinMatchLog(n: number) {
 
 function normalizeRatio(r: OrderRatio): OrderRatio {
   if (r.ckbMultiplier === 0n || r!.udtMultiplier === 0n) {
-    return normalizedInvalidRatio;
+    return zeroRatio;
   } else {
     return Object.freeze({ ...r });
   }
 }
 
-const normalizedInvalidRatio: OrderRatio = Object.freeze({
+const zeroRatio: OrderRatio = Object.freeze({
   ckbMultiplier: 0n,
   udtMultiplier: 0n,
 });
 
-function ckbOrderOccupiedMax(orderScript: I8Script, udtType: I8Script) {
-  return BigInt(
-    I8Cell.from({
-      lock: orderScript,
-      type: udtType,
-      data: hexify(
-        OrderData.pack({
-          udtAmount: 0n,
-          type: "MatchOrderData",
-          value: {
-            masterOutpoint: {
-              txHash:
-                "0x0000000000000000000000000000000000000000000000000000000000000000",
-              index: "0x0",
-            },
-            orderInfo: {
-              ckbToUdt: normalizedInvalidRatio,
-              udtToCkb: normalizedInvalidRatio,
-              ckbMinMatchLog: 0,
-            },
+const padding =
+  "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+const orderMinCkb = BigInt(
+  I8Cell.from({
+    lock: i8ScriptPadding,
+    type: i8ScriptPadding,
+    data: hexify(
+      OrderData.pack({
+        udtAmount: 0n,
+        type: "MintOrderData",
+        value: {
+          masterDistance: 0,
+          padding,
+          orderInfo: {
+            ckbToUdt: zeroRatio,
+            udtToCkb: zeroRatio,
+            ckbMinMatchLog: 0,
           },
-        }),
-      ),
-    }).cellOutput.capacity,
-  );
-}
+        },
+      }),
+    ),
+  }).cellOutput.capacity,
+);

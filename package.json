@@ -1,6 +1,6 @@
 {
   "name": "@ickb/v1-core",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "iCKB scripts and utilities for interacting with them",
   "main": "dist/cjs/src/index.js",
   "module": "dist/esm/src/index.js",
@@ -25,14 +25,14 @@
     "@ckb-lumos/config-manager": "^0.23.0",
     "@ckb-lumos/helpers": "^0.23.0",
     "@ckb-lumos/rpc": "^0.23.0",
-    "@ickb/lumos-utils": "1.4.1"
+    "@ickb/lumos-utils": "1.4.2"
   },
   "devDependencies": {
     "typescript": "next",
-    "eslint": "^9.10.0",
+    "eslint": "^9.12.0",
     "@typescript-eslint/eslint-plugin": "canary",
     "@typescript-eslint/parser": "canary",
     "prettier": "^3.3.3"
   },
-  "packageManager": "pnpm@9.10.0+sha256.355a8ab8dbb6ad41befbef39bc4fd6b5df85e12761d2724bd01f13e878de4b13"
+  "packageManager": "pnpm@9.12.2+sha256.2ef6e547b0b07d841d605240dce4d635677831148cd30f6d564b8f4f928f73d2"
 }
