@@ -203,6 +203,9 @@ export function ickbPoolSifter(
   return extendedDeposits;
 }
 
+// ickbDeposit calls need to be followed by a addIckbUdtChange call when closing the tx
+// otherwise those deposits do not have a receipt, so they're not credited to the user
+// and basically get burned
 export function ickbDeposit(
   tx: TransactionSkeletonType,
   depositQuantity: number,
