@@ -1,6 +1,10 @@
 # iCKB v1 core scripts
 
-## Building the scripts
+## Audit
+
+These L1 Scripts have been both internally reviewed by individuals with deep experience in Nervos L1 and [externally audited by the Scalebit team](http://scalebit.xyz/reports/20240911-ICKB-Final-Audit-Report.pdf), an internationally recognized blockchain security team.
+
+## Building the Scripts
 
 1. Install cargo, rust and docker. (Version seems irrelevant to the build)
 2. Install cross `rev=6982b6c` locked:

@@ -1,14 +1,11 @@
 # iCKB v1 core
 
-This repository contains:
+This repository contains the iCKB Nervos L1 scripts.
 
-- The iCKB Nervos L1 scripts
-- A small library that provides utilities for interacting with them.
+## Audit
 
-## Warning
-
-While the iCKB Nervos L1 scripts are stable and they are expected to live for a long time, not the same goes for the typescript utility library. It's advised against building on top of the typescript library outside iCKB and related Phroi's projects. The absence of docs, the unstable API and the future possibility of it becoming unmaintained make it suitable only as internal library.
+These L1 Scripts have been both internally reviewed by individuals with deep experience in Nervos L1 and [externally audited by the Scalebit team](http://scalebit.xyz/reports/20240911-ICKB-Final-Audit-Report.pdf), an internationally recognized blockchain security team.
 
 ## Licensing
 
-The license is the MIT License, see the [`LICENSE`](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/v1-core) and it is released under the [MIT License](./LICENSE).

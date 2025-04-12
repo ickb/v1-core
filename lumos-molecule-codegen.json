@@ -1,6 +1,0 @@
-{
-    "objectKeyFormat": "camelcase",
-    "prepend": "import { Uint8, Uint32, Uint64, Uint128, Int32, OutPoint } from '@ickb/lumos-utils';",
-    "schemaDir": "schemas",
-    "outDir": "src"
-}
