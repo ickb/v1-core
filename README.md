@@ -1,4 +1,4 @@
-# iCKB v1 core
+# iCKB/Contracts
 
 This repository contains the iCKB Nervos L1 scripts.
 
@@ -8,4 +8,4 @@ These L1 Scripts have been both internally reviewed by individuals with deep exp
 
 ## Licensing
 
-This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/v1-core) and it is released under the [MIT License](./LICENSE).
+This source code, crafted with care by [Phroi](https://phroi.com/), is freely available on [GitHub](https://github.com/ickb/contracts) and it is released under the [MIT License](./LICENSE).
